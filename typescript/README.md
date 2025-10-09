@@ -144,3 +144,329 @@ pnpm format
 - `@repo/web` - Vite + React physician office application
 - `@repo/database` - Database layer (built with tsup)
 - `@repo/types` - Shared types (built with tsup)
+
+---
+
+## Deployment to Google Cloud Run
+
+The web application automatically deploys to Google Cloud Run via GitHub Actions on every push to `main` branch.
+
+### Prerequisites
+
+1. **Google Cloud Account** with billing enabled
+2. **GitHub Repository** with the monorepo code
+3. **Required GCP APIs** enabled:
+   - Cloud Run API
+   - Artifact Registry API
+   - IAM Service Account Credentials API
+
+### One-Time GCP Setup
+
+#### 1. Create a Google Cloud Project
+
+```bash
+export PROJECT_ID="health-474623"  # Your GCP project ID
+export REGION="us-central1"
+export SERVICE_NAME="health-web"
+
+# Set active project
+gcloud config set project $PROJECT_ID
+
+# Verify project is set
+gcloud config get-value project
+
+# Enable billing (if not already enabled)
+gcloud beta billing accounts list
+gcloud beta billing projects link $PROJECT_ID --billing-account=BILLING_ACCOUNT_ID
+```
+
+#### 2. Enable Required APIs
+
+```bash
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  iamcredentials.googleapis.com \
+  cloudresourcemanager.googleapis.com
+```
+
+#### 3. Create Artifact Registry Repository
+
+```bash
+gcloud artifacts repositories create physician-office-web \
+  --repository-format=docker \
+  --location=$REGION \
+  --description="Docker repository for physician office app"
+```
+
+#### 4. Set Up Workload Identity Federation
+
+This allows GitHub Actions to authenticate to GCP without storing service account keys.
+
+```bash
+# Create service account
+gcloud iam service-accounts create github-actions-deployer \
+  --display-name="GitHub Actions Deployer"
+
+export SA_EMAIL="github-actions-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Grant necessary permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/artifactregistry.writer"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser"
+
+# Create Workload Identity Pool
+gcloud iam workload-identity-pools create "github-pool" \
+  --location="global" \
+  --display-name="GitHub Actions Pool"
+
+# Get the pool ID
+export WORKLOAD_IDENTITY_POOL_ID=$(gcloud iam workload-identity-pools describe "github-pool" \
+  --location="global" \
+  --format="value(name)")
+
+# Create Workload Identity Provider
+export REPO="mbalsara/newgen"
+
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository == '${REPO}'" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# Allow GitHub Actions from your repo to impersonate the service account
+
+gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${WORKLOAD_IDENTITY_POOL_ID}/attribute.repository/${REPO}"
+
+# Get the Workload Identity Provider name (needed for GitHub secrets)
+echo "WIF_PROVIDER:"
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --format="value(name)"
+
+echo "WIF_SERVICE_ACCOUNT: ${SA_EMAIL}"
+```
+
+### GitHub Secrets Setup
+
+Add the following secrets to your GitHub repository (`Settings` → `Secrets and variables` → `Actions`):
+
+1. **GCP_PROJECT_ID**
+   - Value: Your GCP project ID (e.g., `my-project-12345`)
+
+2. **WIF_PROVIDER**
+   - Value: Full workload identity provider path from setup step
+   - Format: `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
+
+3. **WIF_SERVICE_ACCOUNT**
+   - Value: Service account email
+   - Format: `github-actions-deployer@PROJECT_ID.iam.gserviceaccount.com`
+
+### Deployment Process
+
+#### Automatic Deployment
+
+Every push to the `main` branch automatically triggers deployment:
+
+```bash
+git add .
+git commit -m "Deploy to Cloud Run"
+git push origin main
+```
+
+The GitHub Actions workflow will:
+1. ✅ Install dependencies
+2. ✅ Build the application
+3. ✅ Authenticate to Google Cloud
+4. ✅ Build Docker image
+5. ✅ Push to Artifact Registry
+6. ✅ Deploy to Cloud Run
+7. ✅ Output the live URL
+
+#### Manual Deployment
+
+You can also trigger deployment manually:
+
+1. Go to `Actions` tab in GitHub
+2. Select "Deploy to Cloud Run" workflow
+3. Click "Run workflow"
+4. Select branch and click "Run"
+
+#### Local Docker Build (Optional)
+
+Test the Docker build locally before deploying:
+
+```bash
+# Build image
+docker build -t health-web -f apps/web/Dockerfile .
+
+# Run locally
+docker run -p 8080:8080 health-web
+
+# Visit http://localhost:8080
+```
+
+### Monitoring & Management
+
+#### View Deployment Status
+
+```bash
+# List Cloud Run services
+gcloud run services list --region=$REGION
+
+# Describe the service
+gcloud run services describe $SERVICE_NAME --region=$REGION
+
+# View logs
+gcloud run services logs read $SERVICE_NAME --region=$REGION
+
+# Follow logs in real-time
+gcloud run services logs tail $SERVICE_NAME --region=$REGION
+```
+
+#### Update Service Configuration
+
+```bash
+# Scale min/max instances
+gcloud run services update $SERVICE_NAME \
+  --region=$REGION \
+  --min-instances=0 \
+  --max-instances=10
+
+# Update memory/CPU
+gcloud run services update $SERVICE_NAME \
+  --region=$REGION \
+  --memory=1Gi \
+  --cpu=2
+
+# Set environment variables
+gcloud run services update $SERVICE_NAME \
+  --region=$REGION \
+  --set-env-vars="NODE_ENV=production,API_URL=https://api.example.com"
+```
+
+#### Access the Deployed Application
+
+After deployment, your application will be available at:
+```
+https://health-web-RANDOM_ID-uc.a.run.app
+```
+
+The exact URL is shown in:
+- GitHub Actions deployment summary
+- Cloud Run console
+- Command output: `gcloud run services describe $SERVICE_NAME --region=$REGION --format='value(status.url)'`
+
+### Cost Optimization
+
+Cloud Run pricing is based on:
+- **CPU & Memory**: Only charged when handling requests
+- **Requests**: First 2 million requests/month are free
+- **Networking**: Outbound data transfer
+
+**Recommended settings for cost optimization:**
+- `--min-instances=0` (scale to zero when idle)
+- `--memory=512Mi` (adequate for static SPA)
+- `--cpu=1` (sufficient for nginx)
+- `--max-instances=10` (prevent runaway costs)
+
+### Troubleshooting
+
+#### Build Failures
+
+Check GitHub Actions logs:
+```bash
+# View recent workflow runs
+gh run list --workflow=deploy-cloud-run.yml
+
+# View specific run logs
+gh run view RUN_ID --log
+```
+
+#### Deployment Failures
+
+```bash
+# Check Cloud Run service events
+gcloud run services describe $SERVICE_NAME \
+  --region=$REGION \
+  --format='value(status.conditions)'
+
+# View revision details
+gcloud run revisions list \
+  --service=$SERVICE_NAME \
+  --region=$REGION
+```
+
+#### Application Errors
+
+```bash
+# Stream logs
+gcloud run services logs tail $SERVICE_NAME --region=$REGION
+
+# Filter by severity
+gcloud run services logs read $SERVICE_NAME \
+  --region=$REGION \
+  --log-filter='severity>=ERROR'
+```
+
+### Cleanup
+
+To remove all deployed resources:
+
+```bash
+# Delete Cloud Run service
+gcloud run services delete $SERVICE_NAME --region=$REGION
+
+# Delete Artifact Registry repository
+gcloud artifacts repositories delete physician-office-web --location=$REGION
+
+# Delete service account
+gcloud iam service-accounts delete $SA_EMAIL
+
+# Delete Workload Identity Pool
+gcloud iam workload-identity-pools delete github-pool --location=global
+```
+
+---
+
+## Architecture
+
+### Production Deployment
+
+```
+GitHub (push to main)
+    ↓
+GitHub Actions
+    ↓
+Build Docker Image (multi-stage)
+    ↓
+Google Artifact Registry
+    ↓
+Cloud Run (nginx serving static files)
+    ↓
+Users
+```
+
+### Docker Image Layers
+
+1. **Base**: Node.js 18 Alpine
+2. **Dependencies**: pnpm install (cached)
+3. **Build**: Vite production build
+4. **Runtime**: nginx Alpine (minimal)
+
+**Final image size**: ~50MB (optimized)
+
+---

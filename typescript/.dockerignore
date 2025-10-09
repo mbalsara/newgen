@@ -1,9 +1,51 @@
-node_modules
-.next
-.turbo
-dist
-.env*.local
-.git
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Build outputs
+dist/
+build/
+.turbo/
+.vite/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
 .gitignore
-README.md
-npm-debug.log
+.gitattributes
+
+# CI/CD
+.github/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.md
+!README.md
+.prettierrc
+.eslintrc*
