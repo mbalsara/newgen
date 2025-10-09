@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'apps/web/**'
-      - '.github/workflows/deploy-cloud-run.yml'
+      - 'typescript/apps/web/**'
+      - 'typescript/.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
 
 env:
@@ -72,7 +72,7 @@ jobs:
         run: |
           docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}/${{ env.SERVICE_NAME }}:latest \
-            -f apps/web/Dockerfile .
+            -f typescript/apps/web/Dockerfile ./typescript
 
       - name: Push Docker image
         run: |
