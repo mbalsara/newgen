@@ -7,11 +7,10 @@ Full-stack TypeScript monorepo with React, Express, and PostgreSQL.
 ```
 ├── apps/
 │   ├── api/          # Express API server
-│   └── web/          # Vite + React web application
+│   └── web/          # Vite + React physician office application
 ├── packages/
 │   ├── database/     # Drizzle ORM & schema
-│   ├── types/        # Shared TypeScript types
-│   └── ui/           # Shared React components (Shadcn)
+│   └── types/        # Shared TypeScript types
 └── docker-compose.yml
 ```
 
@@ -142,7 +141,6 @@ pnpm format
 ## Workspaces
 
 - `@repo/api` - Express API (built with tsup)
-- `@repo/web` - Vite + React web app
+- `@repo/web` - Vite + React physician office application
 - `@repo/database` - Database layer (built with tsup)
 - `@repo/types` - Shared types (built with tsup)
-- `@repo/ui` - UI components (built with tsup)
