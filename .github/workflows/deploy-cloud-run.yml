@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'typescript/apps/web/**'
-      - 'typescript/.github/workflows/deploy-cloud-run.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
 
 env:
