@@ -39,6 +39,7 @@ jobs:
 
       - name: Get pnpm store directory
         shell: bash
+        working-directory: ./typescript
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
@@ -46,14 +47,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('typescript/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
+        working-directory: ./typescript
         run: pnpm install --frozen-lockfile
 
       - name: Build application
+        working-directory: ./typescript
         run: pnpm --filter @repo/web build
 
       - name: Authenticate to Google Cloud
