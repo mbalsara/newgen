@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import type { Appointment } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,6 +10,7 @@ import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { ViewControls } from "./view-controls"
 import { Link } from "react-router-dom"
+import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
 
 interface TodaysPatientsTableProps {
   appointments: Appointment[]
@@ -24,6 +25,7 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
   const [sortField, setSortField] = useState<SortField>("dateTime")
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
+  const currentAppointmentRef = useRef<HTMLTableRowElement>(null)
 
   const uniqueProviders = useMemo(() => {
     const providers = Array.from(new Set(appointments.map((apt) => apt.provider)))
@@ -84,20 +86,15 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
     return filtered
   }, [appointments, searchQuery, sortField, sortDirection, selectedProviders])
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount)
-  }
+  // Scroll to current appointment on mount
+  useEffect(() => {
+    if (currentAppointmentRef.current) {
+      currentAppointmentRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  }, [filteredAndSortedAppointments])
 
   return (
     <div className="space-y-4">
@@ -146,9 +143,26 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedAppointments.map((appointment) => (
-              <TableRow key={appointment.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{formatTime(appointment.dateTime)}</TableCell>
+            {filteredAndSortedAppointments.map((appointment) => {
+              const isPast = isPastAppointment(appointment.dateTime)
+              const isCurrent = isCurrentAppointment(appointment.dateTime)
+
+              return (
+                <TableRow
+                  key={appointment.id}
+                  ref={isCurrent ? currentAppointmentRef : null}
+                  className={`hover:bg-muted/30 ${isPast ? 'opacity-50' : ''} ${isCurrent ? 'bg-blue-50 dark:bg-blue-950/30 border-l-4 border-l-blue-500' : ''}`}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      {formatTime(appointment.dateTime)}
+                      {isCurrent && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-blue-500 text-white rounded-full">
+                          Now
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                 <TableCell>{appointment.provider}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -191,7 +205,8 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                   <div className="text-sm text-pretty">{appointment.reason}</div>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>

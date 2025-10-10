@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef, useEffect } from "react"
 import type { Appointment } from "@/lib/types"
 import { Card, CardContent } from "@/components/ui/card"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
@@ -8,6 +8,7 @@ import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { ViewControls } from "./view-controls"
 import { Clock, DollarSign } from "lucide-react"
 import { Link } from "react-router-dom"
+import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
 
 interface TodaysPatientsCalendarProps {
   appointments: Appointment[]
@@ -15,9 +16,9 @@ interface TodaysPatientsCalendarProps {
 }
 
 export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatientsCalendarProps) {
-  const currentTime = new Date()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
+  const currentSlotRef = useRef<HTMLDivElement>(null)
 
   const uniqueProviders = useMemo(() => {
     const providers = Array.from(new Set(appointments.map((apt) => apt.provider)))
@@ -68,28 +69,15 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
     })
   }
 
-  const isCurrentTimeSlot = (slotTime: Date) => {
-    return currentTime.getHours() === slotTime.getHours()
-  }
-
-  const isPastSlot = (slotTime: Date) => {
-    return currentTime.getHours() > slotTime.getHours()
-  }
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount)
-  }
+  // Scroll to current time slot on mount
+  useEffect(() => {
+    if (currentSlotRef.current) {
+      currentSlotRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  }, [filteredAppointments])
 
   return (
     <div className="space-y-4">
@@ -107,26 +95,22 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
       <div className="space-y-2">
         {timeSlots.map((slot) => {
           const appointment = getAppointmentForSlot(slot)
-          const isCurrent = isCurrentTimeSlot(slot)
-          const isPast = isPastSlot(slot)
+          const isCurrent = isCurrentAppointment(slot)
+          const isPast = isPastAppointment(slot)
 
           return (
-            <div key={slot.toISOString()} className="relative">
-              {isCurrent && (
-                <div className="absolute left-0 right-0 top-0 flex items-center z-10">
-                  <div className="flex-1 h-0.5 bg-red-500" />
-                  <div className="flex items-center gap-2 px-3 py-1 bg-red-500 text-white text-xs font-medium rounded-full">
-                    <Clock className="h-3 w-3" />
-                    Current Time
-                  </div>
-                  <div className="flex-1 h-0.5 bg-red-500" />
-                </div>
-              )}
-
-              <div className={`flex gap-4 ${isCurrent ? "mt-8" : ""}`}>
+            <div key={slot.toISOString()} className="relative" ref={isCurrent ? currentSlotRef : null}>
+              <div className="flex gap-4">
                 <div className="w-24 flex-shrink-0 pt-2">
                   <div className={`text-sm font-medium ${isPast ? "text-muted-foreground" : "text-foreground"}`}>
-                    {formatTime(slot)}
+                    <div className="flex items-center gap-2">
+                      {formatTime(slot)}
+                      {isCurrent && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-blue-500 text-white rounded-full">
+                          Now
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -134,8 +118,8 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
                   {appointment ? (
                     <Card
                       className={`h-full transition-all hover:shadow-md ${
-                        isPast ? "opacity-60" : ""
-                      } border-l-4 border-l-primary`}
+                        isPast ? "opacity-50" : ""
+                      } ${isCurrent ? "bg-blue-50 dark:bg-blue-950/30 border-l-4 border-l-blue-500" : "border-l-4 border-l-primary"}`}
                     >
                       <CardContent className="p-3">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
