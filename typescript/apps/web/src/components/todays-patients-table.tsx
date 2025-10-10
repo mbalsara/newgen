@@ -202,18 +202,20 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                   </div>
                 </TableCell>
                 <TableCell className="align-top">
-                  <InsuranceInfoPopover insurance={appointment.patient.insurance}>
-                    <div className="space-y-1 text-sm cursor-pointer">
-                      <div className="font-medium">{appointment.patient.insurance.provider}</div>
-                      <div className="text-muted-foreground">ID: {appointment.patient.insurance.id}</div>
-                      <div className="text-muted-foreground">
-                        Co-pay: {formatCurrency(appointment.patient.insurance.copay)}
-                      </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="font-medium">{appointment.patient.insurance.provider}</div>
+                    <div className="text-muted-foreground">ID: {appointment.patient.insurance.id}</div>
+                    <div className="text-muted-foreground">
+                      Co-pay: {formatCurrency(appointment.patient.insurance.copay)}
                     </div>
-                  </InsuranceInfoPopover>
+                  </div>
                 </TableCell>
                 <TableCell className="align-middle">
-                  <InsuranceStatusIndicator insurance={appointment.patient.insurance} />
+                  <InsuranceInfoPopover insurance={appointment.patient.insurance}>
+                    <div className="cursor-pointer">
+                      <InsuranceStatusIndicator insurance={appointment.patient.insurance} />
+                    </div>
+                  </InsuranceInfoPopover>
                 </TableCell>
                 <TableCell className="max-w-xs">
                   <div className="text-sm text-pretty">{appointment.reason}</div>
