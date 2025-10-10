@@ -46,21 +46,26 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
       </Button>
 
       <div className="relative">
-        <Button
-          variant="outline"
-          className="min-w-[200px] justify-start text-left font-normal"
-          onClick={handleButtonClick}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {format(selectedDate, "PPP")}
-        </Button>
         <input
           ref={dateInputRef}
           type="date"
           value={formatDateForInput(selectedDate)}
           onChange={handleDateInputChange}
-          className="absolute inset-0 opacity-0 cursor-pointer"
+          onClick={(e) => {
+            e.currentTarget.showPicker()
+          }}
+          className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full h-full"
         />
+        <Button
+          variant="outline"
+          className="min-w-[200px] justify-start text-left font-normal pointer-events-none"
+          asChild
+        >
+          <div>
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {format(selectedDate, "PPP")}
+          </div>
+        </Button>
       </div>
 
       <Button
