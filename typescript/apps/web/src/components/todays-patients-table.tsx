@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowUpDown, ExternalLink, DollarSign } from "lucide-react"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
-import { ProviderFilter } from "./provider-filter"
+import { ViewControls } from "./view-controls"
 import { Link } from "react-router-dom"
 
 interface TodaysPatientsTableProps {
@@ -101,25 +101,16 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 justify-between">
-        <div className="flex items-center gap-4 flex-1">
-          <ProviderFilter
-            providers={uniqueProviders}
-            selectedProviders={selectedProviders}
-            onSelectionChange={setSelectedProviders}
-          />
-          <Input
-            placeholder="Search patients, providers, insurance, reason..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-md"
-          />
-          <span className="text-sm text-muted-foreground whitespace-nowrap">
-            {filteredAndSortedAppointments.length} of {appointments.length} appointments
-          </span>
-        </div>
-        {viewToggle && <div>{viewToggle}</div>}
-      </div>
+      <ViewControls
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        providers={uniqueProviders}
+        selectedProviders={selectedProviders}
+        onProviderSelectionChange={setSelectedProviders}
+        filteredCount={filteredAndSortedAppointments.length}
+        totalCount={appointments.length}
+        viewToggle={viewToggle}
+      />
 
       <div className="border rounded-lg overflow-hidden">
         <Table>

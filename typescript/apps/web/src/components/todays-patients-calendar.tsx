@@ -5,16 +5,16 @@ import type { Appointment } from "@/lib/types"
 import { Card, CardContent } from "@/components/ui/card"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
-import { ProviderFilter } from "./provider-filter"
-import { Input } from "@/components/ui/input"
+import { ViewControls } from "./view-controls"
 import { Clock, DollarSign } from "lucide-react"
 import { Link } from "react-router-dom"
 
 interface TodaysPatientsCalendarProps {
   appointments: Appointment[]
+  viewToggle?: React.ReactNode
 }
 
-export function TodaysPatientsCalendar({ appointments }: TodaysPatientsCalendarProps) {
+export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatientsCalendarProps) {
   const currentTime = new Date()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
@@ -93,22 +93,16 @@ export function TodaysPatientsCalendar({ appointments }: TodaysPatientsCalendarP
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <ProviderFilter
-          providers={uniqueProviders}
-          selectedProviders={selectedProviders}
-          onSelectionChange={setSelectedProviders}
-        />
-        <Input
-          placeholder="Search patients, providers, insurance, reason..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-md"
-        />
-        <span className="text-sm text-muted-foreground">
-          {filteredAppointments.length} of {appointments.length} appointments
-        </span>
-      </div>
+      <ViewControls
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        providers={uniqueProviders}
+        selectedProviders={selectedProviders}
+        onProviderSelectionChange={setSelectedProviders}
+        filteredCount={filteredAppointments.length}
+        totalCount={appointments.length}
+        viewToggle={viewToggle}
+      />
 
       <div className="space-y-2">
         {timeSlots.map((slot) => {

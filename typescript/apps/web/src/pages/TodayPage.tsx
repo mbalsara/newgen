@@ -48,25 +48,36 @@ export default function TodayPage() {
 
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="table" className="space-y-6">
-          <TabsContent value="table" className="space-y-4">
-            <TodaysPatientsTable
-              appointments={todaysAppointments}
-              viewToggle={
-                <TabsList className="h-9">
-                  <TabsTrigger value="table" className="px-3" title="Table View">
-                    <TableIcon className="h-4 w-4" />
-                  </TabsTrigger>
-                  <TabsTrigger value="calendar" className="px-3" title="Calendar View">
-                    <CalendarDays className="h-4 w-4" />
-                  </TabsTrigger>
-                </TabsList>
-              }
-            />
-          </TabsContent>
+          {(() => {
+            const viewToggle = (
+              <TabsList className="h-9">
+                <TabsTrigger value="table" className="px-3" title="Table View">
+                  <TableIcon className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="px-3" title="Calendar View">
+                  <CalendarDays className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+            )
 
-          <TabsContent value="calendar" className="space-y-4">
-            <TodaysPatientsCalendar appointments={todaysAppointments} />
-          </TabsContent>
+            return (
+              <>
+                <TabsContent value="table" className="space-y-4">
+                  <TodaysPatientsTable
+                    appointments={todaysAppointments}
+                    viewToggle={viewToggle}
+                  />
+                </TabsContent>
+
+                <TabsContent value="calendar" className="space-y-4">
+                  <TodaysPatientsCalendar
+                    appointments={todaysAppointments}
+                    viewToggle={viewToggle}
+                  />
+                </TabsContent>
+              </>
+            )
+          })()}
         </Tabs>
       </div>
     </div>
