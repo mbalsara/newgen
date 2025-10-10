@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TableIcon, CalendarDays } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { DateNavigation } from "@/components/date-navigation"
-import { format, isToday } from "date-fns"
+import { isToday } from "date-fns"
 
 export default function TodayPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())

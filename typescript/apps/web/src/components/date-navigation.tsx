@@ -26,10 +26,6 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
     }
   }
 
-  const handleButtonClick = () => {
-    dateInputRef.current?.showPicker()
-  }
-
   const formatDateForInput = (date: Date) => {
     return format(date, "yyyy-MM-dd")
   }

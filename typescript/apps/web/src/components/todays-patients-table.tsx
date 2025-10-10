@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef, useEffect } from "react"
 import type { Appointment } from "@/lib/types"
-import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown, ExternalLink, DollarSign } from "lucide-react"

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { ViewControls } from "./view-controls"
-import { Clock, DollarSign } from "lucide-react"
+import { DollarSign } from "lucide-react"
 import { Link } from "react-router-dom"
 import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
 
