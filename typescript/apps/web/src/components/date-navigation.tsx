@@ -1,12 +1,7 @@
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { format, addDays, subDays, isToday } from "date-fns"
+import { useState } from "react"
 
 interface DateNavigationProps {
   selectedDate: Date
@@ -14,6 +9,8 @@ interface DateNavigationProps {
 }
 
 export function DateNavigation({ selectedDate, onDateChange }: DateNavigationProps) {
+  const [showDateInput, setShowDateInput] = useState(false)
+
   const handlePreviousDay = () => {
     onDateChange(subDays(selectedDate, 1))
   }
@@ -22,10 +19,16 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
     onDateChange(addDays(selectedDate, 1))
   }
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      onDateChange(date)
+  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(e.target.value + 'T00:00:00')
+    if (!isNaN(newDate.getTime())) {
+      onDateChange(newDate)
+      setShowDateInput(false)
     }
+  }
+
+  const formatDateForInput = (date: Date) => {
+    return format(date, "yyyy-MM-dd")
   }
 
   return (
@@ -39,25 +42,25 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
         <ChevronLeft className="h-4 w-4" />
       </Button>
 
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className="min-w-[200px] justify-start text-left font-normal"
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {format(selectedDate, "PPP")}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={handleDateSelect}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
+      {showDateInput ? (
+        <input
+          type="date"
+          value={formatDateForInput(selectedDate)}
+          onChange={handleDateInputChange}
+          onBlur={() => setShowDateInput(false)}
+          autoFocus
+          className="h-10 min-w-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        />
+      ) : (
+        <Button
+          variant="outline"
+          className="min-w-[200px] justify-start text-left font-normal"
+          onClick={() => setShowDateInput(true)}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {format(selectedDate, "PPP")}
+        </Button>
+      )}
 
       <Button
         variant="outline"
