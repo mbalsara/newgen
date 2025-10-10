@@ -19,7 +19,10 @@ export function InsuranceInfoPopover({ insurance, children }: InsuranceInfoPopov
         <div className="space-y-3">
           <div className="border-b pb-2">
             <h4 className="font-semibold text-sm">{insurance.provider}</h4>
-            <p className="text-xs text-muted-foreground">Policy ID: {insurance.id}</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Policy ID: {insurance.id}</span>
+              <span className="font-medium">Co-pay: {formatCurrency(insurance.copay)}</span>
+            </div>
           </div>
 
           <div className="space-y-2 text-sm">
@@ -46,12 +49,6 @@ export function InsuranceInfoPopover({ insurance, children }: InsuranceInfoPopov
                 </div>
               </div>
             )}
-
-            {/* Copay */}
-            <div className="flex items-start gap-2 text-xs">
-              <div className="font-medium text-muted-foreground w-20">Co-pay:</div>
-              <div className="font-medium">{formatCurrency(insurance.copay)}</div>
-            </div>
 
             {/* Authorizations Table */}
             {insurance.authorizations && insurance.authorizations.length > 0 && (
