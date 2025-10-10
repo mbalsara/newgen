@@ -2,6 +2,7 @@ import type React from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import { Link } from "react-router-dom"
+import { ModeToggle } from "@/components/mode-toggle"
 
 interface PageHeaderProps {
   title: string
@@ -26,7 +27,10 @@ export function PageHeader({ title, subtitle, backHref = "/", rightContent }: Pa
               {subtitle && <p className="text-muted-foreground mt-1">{subtitle}</p>}
             </div>
           </div>
-          {rightContent}
+          <div className="flex items-center gap-4">
+            {rightContent}
+            <ModeToggle />
+          </div>
         </div>
       </div>
     </div>

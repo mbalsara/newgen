@@ -10,7 +10,7 @@ import './index.css'
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="light" storageKey="physician-office-theme">
+    <ThemeProvider defaultTheme="system" storageKey="physician-office-theme" attribute="class" enableSystem>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomePage />} />
