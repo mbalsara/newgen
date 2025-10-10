@@ -34,15 +34,15 @@ export default function TodayPage() {
         title={getPageTitle()}
         subtitle={getPageSubtitle()}
         backHref="/"
-      />
-
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex justify-center mb-6">
+        rightContent={
           <DateNavigation
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
           />
-        </div>
+        }
+      />
+
+      <div className="container mx-auto px-4 py-6">
         <SummaryMetrics appointments={todaysAppointments} />
       </div>
 
