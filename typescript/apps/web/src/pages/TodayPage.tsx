@@ -48,19 +48,20 @@ export default function TodayPage() {
 
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="table" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="table" className="flex items-center gap-2">
-              <TableIcon className="h-4 w-4" />
-              Table View
-            </TabsTrigger>
-            <TabsTrigger value="calendar" className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4" />
-              Calendar View
-            </TabsTrigger>
-          </TabsList>
-
           <TabsContent value="table" className="space-y-4">
-            <TodaysPatientsTable appointments={todaysAppointments} />
+            <TodaysPatientsTable
+              appointments={todaysAppointments}
+              viewToggle={
+                <TabsList className="h-9">
+                  <TabsTrigger value="table" className="px-3" title="Table View">
+                    <TableIcon className="h-4 w-4" />
+                  </TabsTrigger>
+                  <TabsTrigger value="calendar" className="px-3" title="Calendar View">
+                    <CalendarDays className="h-4 w-4" />
+                  </TabsTrigger>
+                </TabsList>
+              }
+            />
           </TabsContent>
 
           <TabsContent value="calendar" className="space-y-4">

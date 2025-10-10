@@ -13,12 +13,13 @@ import { Link } from "react-router-dom"
 
 interface TodaysPatientsTableProps {
   appointments: Appointment[]
+  viewToggle?: React.ReactNode
 }
 
 type SortField = "dateTime" | "provider" | "patientName" | "insurance"
 type SortDirection = "asc" | "desc"
 
-export function TodaysPatientsTable({ appointments }: TodaysPatientsTableProps) {
+export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatientsTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortField, setSortField] = useState<SortField>("dateTime")
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
@@ -100,21 +101,24 @@ export function TodaysPatientsTable({ appointments }: TodaysPatientsTableProps) 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <ProviderFilter
-          providers={uniqueProviders}
-          selectedProviders={selectedProviders}
-          onSelectionChange={setSelectedProviders}
-        />
-        <Input
-          placeholder="Search patients, providers, insurance, reason..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-md"
-        />
-        <span className="text-sm text-muted-foreground">
-          {filteredAndSortedAppointments.length} of {appointments.length} appointments
-        </span>
+      <div className="flex items-center gap-4 justify-between">
+        <div className="flex items-center gap-4 flex-1">
+          <ProviderFilter
+            providers={uniqueProviders}
+            selectedProviders={selectedProviders}
+            onSelectionChange={setSelectedProviders}
+          />
+          <Input
+            placeholder="Search patients, providers, insurance, reason..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-md"
+          />
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {filteredAndSortedAppointments.length} of {appointments.length} appointments
+          </span>
+        </div>
+        {viewToggle && <div>{viewToggle}</div>}
       </div>
 
       <div className="border rounded-lg overflow-hidden">
