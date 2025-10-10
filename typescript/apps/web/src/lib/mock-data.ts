@@ -278,7 +278,7 @@ export const upcomingAppointments: UpcomingAppointment[] = [
   {
     id: "U4",
     provider: "Dr. Sarah Johnson",
-    dateTime: new Date(today.getTime() + 96 * 60 * 60 * 1000), // 4 days
+    dateTime: new Date(today.getTime() + (24 * 28) * 60 * 60 * 1000), // 28 days
     status: "scheduled",
     reason: "Follow-up - Post Surgery",
     patient: {
