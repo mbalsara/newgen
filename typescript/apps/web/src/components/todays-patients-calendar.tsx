@@ -7,6 +7,7 @@ import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { InsuranceInfoPopover } from "./insurance-info-popover"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { PatientInfoPopover } from "./patient-info-popover"
+import { PatientTypeBadge } from "./patient-type-badge"
 import { ViewControls } from "./view-controls"
 import { DollarSign } from "lucide-react"
 import { Link } from "react-router-dom"
@@ -126,7 +127,7 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
                       <CardContent className="p-3">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs text-muted-foreground">Patient:</span>
                               <PatientInfoPopover patient={appointment.patient}>
                                 <Link
@@ -136,6 +137,7 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
                                   {appointment.patient.name}
                                 </Link>
                               </PatientInfoPopover>
+                              {appointment.patient.patientType && <PatientTypeBadge type={appointment.patient.patientType} />}
                               {appointment.patient.flags && <PatientFlagsIndicator flags={appointment.patient.flags} />}
                             </div>
                             <div className="text-sm text-muted-foreground space-y-0">

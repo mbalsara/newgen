@@ -17,6 +17,7 @@ export const todaysAppointments: Appointment[] = [
       phone: "(555) 123-4567",
       email: "michael.chen@email.com",
       gender: "Male",
+      patientType: "follow-up",
       balance: 0,
       primaryCarePhysician: "Dr. Sarah Johnson",
       referringPhysician: "Dr. James Wilson",
@@ -113,6 +114,7 @@ export const todaysAppointments: Appointment[] = [
       name: "Emily Davis",
       dob: "1990-05-18",
       phone: "(555) 456-7890",
+      patientType: "new",
       balance: 0,
       flags: ["missing-docs"] as PatientFlag[],
       insurance: {

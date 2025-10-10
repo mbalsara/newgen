@@ -34,6 +34,8 @@ export interface Insurance {
   authorizations?: Authorization[]
 }
 
+export type PatientType = "new" | "follow-up"
+
 export interface Patient {
   id: string
   name: string
@@ -41,6 +43,7 @@ export interface Patient {
   phone: string
   email?: string
   gender?: "Male" | "Female" | "Other"
+  patientType?: PatientType
   balance: number
   outstandingDetails?: string
   flags?: PatientFlag[]

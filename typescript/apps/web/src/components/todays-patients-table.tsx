@@ -9,6 +9,7 @@ import { InsuranceStatusIndicator } from "./insurance-status-indicator"
 import { InsuranceInfoPopover } from "./insurance-info-popover"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { PatientInfoPopover } from "./patient-info-popover"
+import { PatientTypeBadge } from "./patient-type-badge"
 import { ViewControls } from "./view-controls"
 import { Link } from "react-router-dom"
 import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
@@ -18,7 +19,7 @@ interface TodaysPatientsTableProps {
   viewToggle?: React.ReactNode
 }
 
-type SortField = "dateTime" | "provider" | "patientName" | "insurance"
+type SortField = "dateTime" | "provider" | "patientName" | "insurance" | "status"
 type SortDirection = "asc" | "desc"
 
 export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatientsTableProps) {
@@ -79,6 +80,9 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
         case "insurance":
           comparison = a.patient.insurance.provider.localeCompare(b.patient.insurance.provider)
           break
+        case "status":
+          comparison = a.patient.insurance.status.localeCompare(b.patient.insurance.status)
+          break
       }
 
       return sortDirection === "asc" ? comparison : -comparison
@@ -132,14 +136,18 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                   <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
                 </Button>
               </TableHead>
-              <TableHead>Patient Info</TableHead>
               <TableHead>
                 <Button variant="ghost" size="sm" onClick={() => handleSort("insurance")} className="h-8 px-2">
                   Insurance
                   <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
                 </Button>
               </TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>
+                <Button variant="ghost" size="sm" onClick={() => handleSort("status")} className="h-8 px-2">
+                  Status
+                  <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                </Button>
+              </TableHead>
               <TableHead>Reason for Visit</TableHead>
             </TableRow>
           </TableHeader>
@@ -166,33 +174,34 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                   </TableCell>
                 <TableCell>{appointment.provider}</TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <PatientInfoPopover patient={appointment.patient}>
-                      <Link
-                        to={`/patient/${appointment.patient.id}`}
-                        className="font-medium text-primary hover:underline inline-flex items-center gap-1"
-                      >
-                        {appointment.patient.name}
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
-                    </PatientInfoPopover>
-                    {appointment.patient.flags && <PatientFlagsIndicator flags={appointment.patient.flags} />}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <PatientInfoPopover patient={appointment.patient}>
+                        <Link
+                          to={`/patient/${appointment.patient.id}`}
+                          className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {appointment.patient.name}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </PatientInfoPopover>
+                      {appointment.patient.patientType && <PatientTypeBadge type={appointment.patient.patientType} />}
+                      {appointment.patient.flags && <PatientFlagsIndicator flags={appointment.patient.flags} />}
+                    </div>
+                    <div className="space-y-0 text-sm">
+                      <div className="text-muted-foreground">DOB: {appointment.patient.dob}</div>
+                      <div className="text-muted-foreground">{appointment.patient.phone}</div>
+                      <div className="text-muted-foreground">ID: {appointment.patient.id}</div>
+                      {appointment.patient.balance > 0 && (
+                        <div className="flex items-center gap-1 text-amber-600 font-medium">
+                          <DollarSign className="h-3 w-3" />
+                          Balance: {formatCurrency(appointment.patient.balance)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
-                <TableCell>
-                  <div className="space-y-1 text-sm">
-                    <div className="text-muted-foreground">DOB: {appointment.patient.dob}</div>
-                    <div className="text-muted-foreground">{appointment.patient.phone}</div>
-                    <div className="text-muted-foreground">ID: {appointment.patient.id}</div>
-                    {appointment.patient.balance > 0 && (
-                      <div className="flex items-center gap-1 text-amber-600 font-medium">
-                        <DollarSign className="h-3 w-3" />
-                        Balance: {formatCurrency(appointment.patient.balance)}
-                      </div>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
                   <InsuranceInfoPopover insurance={appointment.patient.insurance}>
                     <div className="space-y-1 text-sm cursor-pointer">
                       <div className="font-medium">{appointment.patient.insurance.provider}</div>
@@ -203,7 +212,7 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                     </div>
                   </InsuranceInfoPopover>
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-middle">
                   <InsuranceStatusIndicator insurance={appointment.patient.insurance} />
                 </TableCell>
                 <TableCell className="max-w-xs">
