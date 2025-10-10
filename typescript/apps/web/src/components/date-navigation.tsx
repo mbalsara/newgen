@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { format, addDays, subDays, isToday } from "date-fns"
-import { useState } from "react"
+import { useRef } from "react"
 
 interface DateNavigationProps {
   selectedDate: Date
@@ -9,7 +9,7 @@ interface DateNavigationProps {
 }
 
 export function DateNavigation({ selectedDate, onDateChange }: DateNavigationProps) {
-  const [showDateInput, setShowDateInput] = useState(false)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   const handlePreviousDay = () => {
     onDateChange(subDays(selectedDate, 1))
@@ -23,8 +23,11 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
     const newDate = new Date(e.target.value + 'T00:00:00')
     if (!isNaN(newDate.getTime())) {
       onDateChange(newDate)
-      setShowDateInput(false)
     }
+  }
+
+  const handleButtonClick = () => {
+    dateInputRef.current?.showPicker()
   }
 
   const formatDateForInput = (date: Date) => {
@@ -42,25 +45,23 @@ export function DateNavigation({ selectedDate, onDateChange }: DateNavigationPro
         <ChevronLeft className="h-4 w-4" />
       </Button>
 
-      {showDateInput ? (
-        <input
-          type="date"
-          value={formatDateForInput(selectedDate)}
-          onChange={handleDateInputChange}
-          onBlur={() => setShowDateInput(false)}
-          autoFocus
-          className="h-10 min-w-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        />
-      ) : (
+      <div className="relative">
         <Button
           variant="outline"
           className="min-w-[200px] justify-start text-left font-normal"
-          onClick={() => setShowDateInput(true)}
+          onClick={handleButtonClick}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
           {format(selectedDate, "PPP")}
         </Button>
-      )}
+        <input
+          ref={dateInputRef}
+          type="date"
+          value={formatDateForInput(selectedDate)}
+          onChange={handleDateInputChange}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+        />
+      </div>
 
       <Button
         variant="outline"
