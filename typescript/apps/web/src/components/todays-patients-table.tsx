@@ -6,7 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown, ExternalLink, DollarSign } from "lucide-react"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
+import { InsuranceInfoPopover } from "./insurance-info-popover"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
+import { PatientInfoPopover } from "./patient-info-popover"
 import { ViewControls } from "./view-controls"
 import { Link } from "react-router-dom"
 import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
@@ -165,13 +167,15 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                 <TableCell>{appointment.provider}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Link
-                      to={`/patient/${appointment.patient.id}`}
-                      className="font-medium text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      {appointment.patient.name}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
+                    <PatientInfoPopover patient={appointment.patient}>
+                      <Link
+                        to={`/patient/${appointment.patient.id}`}
+                        className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        {appointment.patient.name}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </PatientInfoPopover>
                     {appointment.patient.flags && <PatientFlagsIndicator flags={appointment.patient.flags} />}
                   </div>
                 </TableCell>
@@ -189,13 +193,15 @@ export function TodaysPatientsTable({ appointments, viewToggle }: TodaysPatients
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="space-y-1 text-sm">
-                    <div className="font-medium">{appointment.patient.insurance.provider}</div>
-                    <div className="text-muted-foreground">ID: {appointment.patient.insurance.id}</div>
-                    <div className="text-muted-foreground">
-                      Co-pay: {formatCurrency(appointment.patient.insurance.copay)}
+                  <InsuranceInfoPopover insurance={appointment.patient.insurance}>
+                    <div className="space-y-1 text-sm cursor-pointer">
+                      <div className="font-medium">{appointment.patient.insurance.provider}</div>
+                      <div className="text-muted-foreground">ID: {appointment.patient.insurance.id}</div>
+                      <div className="text-muted-foreground">
+                        Co-pay: {formatCurrency(appointment.patient.insurance.copay)}
+                      </div>
                     </div>
-                  </div>
+                  </InsuranceInfoPopover>
                 </TableCell>
                 <TableCell>
                   <InsuranceStatusIndicator insurance={appointment.patient.insurance} />

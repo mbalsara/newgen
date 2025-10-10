@@ -4,7 +4,9 @@ import { useMemo, useState, useRef, useEffect } from "react"
 import type { Appointment } from "@/lib/types"
 import { Card, CardContent } from "@/components/ui/card"
 import { InsuranceStatusIndicator } from "./insurance-status-indicator"
+import { InsuranceInfoPopover } from "./insurance-info-popover"
 import { PatientFlagsIndicator } from "./patient-flags-indicator"
+import { PatientInfoPopover } from "./patient-info-popover"
 import { ViewControls } from "./view-controls"
 import { DollarSign } from "lucide-react"
 import { Link } from "react-router-dom"
@@ -126,12 +128,14 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-muted-foreground">Patient:</span>
-                              <Link
-                                to={`/patient/${appointment.patient.id}`}
-                                className="font-semibold text-primary hover:underline"
-                              >
-                                {appointment.patient.name}
-                              </Link>
+                              <PatientInfoPopover patient={appointment.patient}>
+                                <Link
+                                  to={`/patient/${appointment.patient.id}`}
+                                  className="font-semibold text-primary hover:underline"
+                                >
+                                  {appointment.patient.name}
+                                </Link>
+                              </PatientInfoPopover>
                               {appointment.patient.flags && <PatientFlagsIndicator flags={appointment.patient.flags} />}
                             </div>
                             <div className="text-sm text-muted-foreground space-y-0">
@@ -159,17 +163,21 @@ export function TodaysPatientsCalendar({ appointments, viewToggle }: TodaysPatie
                           </div>
 
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">Insurance:</span>
-                              <span className="font-medium text-sm">{appointment.patient.insurance.provider}</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground space-y-0">
-                              <div>ID: {appointment.patient.insurance.id}</div>
-                              <div>Co-pay: {formatCurrency(appointment.patient.insurance.copay)}</div>
-                            </div>
-                            <div>
-                              <InsuranceStatusIndicator insurance={appointment.patient.insurance} />
-                            </div>
+                            <InsuranceInfoPopover insurance={appointment.patient.insurance}>
+                              <div className="cursor-pointer">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Insurance:</span>
+                                  <span className="font-medium text-sm">{appointment.patient.insurance.provider}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground space-y-0">
+                                  <div>ID: {appointment.patient.insurance.id}</div>
+                                  <div>Co-pay: {formatCurrency(appointment.patient.insurance.copay)}</div>
+                                </div>
+                                <div>
+                                  <InsuranceStatusIndicator insurance={appointment.patient.insurance} />
+                                </div>
+                              </div>
+                            </InsuranceInfoPopover>
                           </div>
                         </div>
                       </CardContent>

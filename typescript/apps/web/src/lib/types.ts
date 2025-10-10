@@ -15,14 +15,23 @@ export type PatientFlag =
   | "out-of-network"
   | "coverage-exceptions"
 
+export interface Authorization {
+  type: string
+  authorized: boolean
+  visitsAllowed?: number
+  visitsUsed?: number
+}
+
 export interface Insurance {
   id: string
   provider: string
   copay: number
   status: InsuranceStatus
+  eligibilityVerified?: boolean
   verifiedDate?: string
   failureReason?: string
   authCodes?: string[]
+  authorizations?: Authorization[]
 }
 
 export interface Patient {
@@ -30,10 +39,19 @@ export interface Patient {
   name: string
   dob: string
   phone: string
+  email?: string
+  gender?: "Male" | "Female" | "Other"
   balance: number
   outstandingDetails?: string
   flags?: PatientFlag[]
   insurance: Insurance
+  referringPhysician?: string
+  primaryCarePhysician?: string
+  emergencyContact?: {
+    name: string
+    phone: string
+    relationship: string
+  }
 }
 
 export interface Appointment {
