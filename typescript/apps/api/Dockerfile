@@ -37,8 +37,8 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/database/package.json ./packages/database/
 COPY apps/api/package.json ./apps/api/
 
-# Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile
+# Install production dependencies only (--ignore-scripts to skip husky)
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Copy built files from builder
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
