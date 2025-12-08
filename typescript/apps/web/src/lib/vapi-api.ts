@@ -6,8 +6,9 @@
 
 import type { Agent, VapiVoice, VoiceGender, VapiCallStats, AgentFormData } from './agent-types'
 
-const VAPI_API_KEY = import.meta.env.VITE_VAPI_API_KEY || ''
-const VAPI_BASE_URL = 'https://api.vapi.ai'
+// Use proxy in development to avoid CORS issues
+// The proxy is configured in vite.config.ts to forward to api.vapi.ai
+const VAPI_BASE_URL = '/api/vapi'
 
 // Helper for VAPI requests
 async function vapiRequest<T>(
@@ -18,7 +19,6 @@ async function vapiRequest<T>(
   const response = await fetch(`${VAPI_BASE_URL}${endpoint}`, {
     method,
     headers: {
-      'Authorization': `Bearer ${VAPI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
