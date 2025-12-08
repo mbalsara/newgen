@@ -5,7 +5,9 @@ import HomePage from '@/pages/HomePage'
 import TodayPage from '@/pages/TodayPage'
 import UpcomingPage from '@/pages/UpcomingPage'
 import PatientDetailPage from '@/pages/PatientDetailPage'
+import AgentsPage from '@/pages/AgentsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import { LoginPage } from '@/pages/auth/login'
 import './index.css'
 
 function App() {
@@ -17,6 +19,8 @@ function App() {
           <Route path="/today" element={<TodayPage />} />
           <Route path="/upcoming" element={<UpcomingPage />} />
           <Route path="/patient/:id" element={<PatientDetailPage />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/auth/login" element={<LoginPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <Toaster />

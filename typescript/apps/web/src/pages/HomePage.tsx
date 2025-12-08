@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Calendar, Users, Clock, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Calendar, Users, Clock, AlertCircle, CheckCircle2, Bot, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickStatsCard } from "@/components/quick-stats-card"
 import { OpenSlotsWidget } from "@/components/open-slots-widget"
@@ -39,7 +39,7 @@ export default function HomePage() {
           </div>
 
           {/* Main Navigation Cards */}
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <NavigationCard
               href="/today"
               title="Today's Patients"
@@ -85,6 +85,21 @@ export default function HomePage() {
                       },
                     ]
                   : []),
+              ]}
+            />
+
+            <NavigationCard
+              href="/agents"
+              title="AI Agents"
+              description="Manage voice AI agents for reception, eligibility verification, and authorization tasks"
+              icon={Bot}
+              iconBgColor="bg-violet-500/10 text-violet-600"
+              stats={[
+                {
+                  icon: Phone,
+                  label: "Voice agents",
+                  iconColor: "text-violet-600",
+                },
               ]}
             />
           </div>

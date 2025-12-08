@@ -1,21 +1,55 @@
-import express from 'express'
-import cors from 'cors'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
 import dotenv from 'dotenv'
+import { createYoga } from 'graphql-yoga'
+import { schema } from './graphql/schema.js'
 
 dotenv.config()
 
-const app = express()
-const port = process.env.PORT || 3001
+const app = new Hono()
 
-app.use(cors())
-app.use(express.json())
+// Middleware
+app.use('*', logger())
+app.use('*', cors())
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' })
+// Health check
+app.get('/health', (c) => {
+  return c.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  })
 })
 
-// API routes will go here
-
-app.listen(port, () => {
-  console.log(`API server running on port ${port}`)
+// GraphQL endpoint
+const yoga = createYoga({
+  schema,
+  graphqlEndpoint: '/graphql',
+  landingPage: true,
 })
+
+app.use('/graphql', async (c) => {
+  const response = await yoga.fetch(c.req.raw, {
+    // Pass Hono context if needed
+  })
+  return response
+})
+
+const port = Number(process.env.PORT) || 3001
+
+// For Bun or Cloudflare Workers, export the app
+export default {
+  port,
+  fetch: app.fetch,
+}
+
+// For Node.js, use serve
+import { serve } from '@hono/node-server'
+
+serve({
+  fetch: app.fetch,
+  port,
+})
+
+console.log(`🚀 Server running on port ${port}`)
+console.log(`📊 GraphQL endpoint: http://localhost:${port}/graphql`)

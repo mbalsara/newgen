@@ -19,6 +19,7 @@ Full-stack TypeScript monorepo with React, Express, and PostgreSQL.
 - **Frontend**: Vite, React 18, Tailwind CSS, Shadcn UI, TanStack Table
 - **Backend**: Express.js, TypeScript
 - **Database**: PostgreSQL, Drizzle ORM
+- **Authentication**: BetterAuth (Email/Password, OAuth, OTP, Passkeys)
 - **AI**: Vercel AI SDK
 - **Build**: Turbo (monorepo), tsup, pnpm
 - **Testing**: Vitest
@@ -41,12 +42,18 @@ pnpm install
 
 ### Environment Variables
 
-1. Copy `.env.example` to `.env` in `apps/api/`:
+1. Copy `.env.example` to `.env` in both `apps/api/` and `apps/web/`:
 ```bash
 cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
-2. Update `DATABASE_URL` in `apps/api/.env`
+2. Update `DATABASE_URL` in both `.env` files
+
+3. Configure authentication variables in `apps/web/.env`:
+   - OAuth credentials (Google, Apple, Microsoft)
+   - Passkey settings
+   - Email service for OTP (see [Authentication Setup](#authentication))
 
 ### Development
 
@@ -81,6 +88,12 @@ Services:
 
 ### Database
 
+Push schema to database (creates/updates tables):
+
+```bash
+pnpm --filter @repo/database db:push
+```
+
 Generate migrations:
 
 ```bash
@@ -98,6 +111,8 @@ Open Drizzle Studio:
 ```bash
 pnpm --filter @repo/database db:studio
 ```
+
+**Note**: After setting up authentication, run `db:push` to create the auth tables (user, session, account, verification, passkey).
 
 ### Build
 
@@ -144,6 +159,95 @@ pnpm format
 - `@repo/web` - Vite + React physician office application
 - `@repo/database` - Database layer (built with tsup)
 - `@repo/types` - Shared types (built with tsup)
+
+---
+
+## Authentication
+
+The application uses **BetterAuth** for comprehensive authentication and authorization.
+
+### Supported Authentication Methods
+
+✅ **Email & Password** - Traditional username/password authentication
+✅ **Email OTP** - One-time password sent via email (passwordless)
+✅ **Passkeys (WebAuthn)** - Biometric authentication (Face ID, Touch ID, Windows Hello)
+✅ **OAuth Providers** - Single Sign-On with:
+  - Google
+  - Apple
+  - Microsoft
+
+✅ **Forgot Password** - Email OTP-based password reset
+
+### Quick Start
+
+1. **Access the login page**:
+   ```
+   http://localhost:5174/auth/login
+   ```
+
+2. **Configure environment variables** in `apps/web/.env`:
+   ```bash
+   # Database
+   DATABASE_URL=postgresql://user:password@localhost:5432/health_db
+
+   # OAuth Providers
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+
+   APPLE_CLIENT_ID=your_apple_client_id
+   APPLE_CLIENT_SECRET=your_apple_client_secret
+
+   MICROSOFT_CLIENT_ID=your_microsoft_client_id
+   MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
+
+   # Passkey Configuration
+   PASSKEY_RP_ID=localhost
+   PASSKEY_RP_NAME=Health Application
+   PASSKEY_ORIGIN=http://localhost:5174
+   ```
+
+3. **Set up database schema**:
+   ```bash
+   pnpm --filter @repo/database db:push
+   ```
+
+4. **Configure email service** for OTP (optional but recommended):
+   - Update `apps/web/src/lib/auth.ts` with your email provider
+   - Options: SMTP, Resend, SendGrid, etc.
+   - See `AUTH_SETUP.md` for detailed instructions
+
+### Authentication Files
+
+- **Server Config**: `apps/web/src/lib/auth.ts`
+- **Client Config**: `apps/web/src/lib/auth-client.ts`
+- **Database Schema**: `packages/database/src/auth-schema.ts`
+- **Login UI**: `apps/web/src/pages/auth/login.tsx`
+- **Environment Template**: `apps/web/.env.example`
+
+### Complete Documentation
+
+For detailed setup instructions, OAuth provider configuration, and troubleshooting:
+
+📖 **See [AUTH_SETUP.md](./AUTH_SETUP.md)**
+
+This includes:
+- OAuth provider setup guides (Google, Apple, Microsoft)
+- Email service configuration
+- Passkey setup for production
+- API routes reference
+- Usage examples
+- Security best practices
+- Troubleshooting guide
+
+### Database Schema
+
+The authentication system creates the following tables:
+
+- `user` - User accounts and profiles
+- `session` - Active user sessions
+- `account` - OAuth accounts and password credentials
+- `verification` - Email verification and OTP codes
+- `passkey` - WebAuthn/FIDO2 credentials
 
 ---
 
