@@ -46,16 +46,16 @@ export function LoginPage() {
     setIsLoading(true)
 
     try {
-      await authClient.signIn.emailOtp({
+      await authClient.emailOtp.sendVerificationOtp({
         email,
-        fetchOptions: {
-          onSuccess() {
-            toast.success("OTP sent to your email!")
-            setShowOtpInput(true)
-          },
-          onError(context) {
-            toast.error(context.error.message || "Failed to send OTP")
-          },
+        type: "sign-in",
+      }, {
+        onSuccess() {
+          toast.success("OTP sent to your email!")
+          setShowOtpInput(true)
+        },
+        onError(context: { error: { message?: string } }) {
+          toast.error(context.error.message || "Failed to send OTP")
         },
       })
     } catch (error) {
@@ -70,17 +70,16 @@ export function LoginPage() {
     setIsLoading(true)
 
     try {
-      await authClient.signIn.emailOtp.verify({
+      await authClient.signIn.emailOtp({
         email,
         otp,
-        fetchOptions: {
-          onSuccess() {
-            toast.success("Successfully signed in with OTP!")
-            navigate("/")
-          },
-          onError(context) {
-            toast.error(context.error.message || "Invalid OTP")
-          },
+      }, {
+        onSuccess() {
+          toast.success("Successfully signed in with OTP!")
+          navigate("/")
+        },
+        onError(context: { error: { message?: string } }) {
+          toast.error(context.error.message || "Invalid OTP")
         },
       })
     } catch (error) {

@@ -16,5 +16,7 @@ export const {
   signUp,
   signOut,
   useSession,
-  useUser,
 } = authClient
+
+// Alias for useSession to provide user data
+export const useUser = useSession
