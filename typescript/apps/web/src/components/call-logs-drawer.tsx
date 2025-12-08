@@ -20,7 +20,6 @@ import {
   FileText,
   Play,
   Loader2,
-  User,
 } from "lucide-react"
 import type { CallLog } from "@/lib/agent-types"
 import {
