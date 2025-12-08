@@ -166,7 +166,6 @@ jobs:
           env_vars: |
             NODE_ENV=production
           secrets: |
-            DATABASE_URL=DATABASE_URL:latest
             VAPI_API_KEY=VAPI_API_KEY:latest
 
       - name: Show deployed URL
