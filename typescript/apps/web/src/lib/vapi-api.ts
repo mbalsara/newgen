@@ -428,3 +428,104 @@ export async function updateAgentSquad(
     await addAgentToSquad(newSquadId, assistantId)
   }
 }
+
+// ============================================================================
+// CALL LOGS
+// ============================================================================
+
+import type { CallLog } from './agent-types'
+
+/**
+ * Fetch call logs for a specific assistant
+ */
+export async function fetchCallLogs(assistantId: string): Promise<CallLog[]> {
+  try {
+    const calls = await vapiRequest<CallLog[]>(`/call?assistantId=${assistantId}`)
+    // Sort by most recent first
+    return calls.sort((a, b) => {
+      const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0
+      const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0
+      return dateB - dateA
+    })
+  } catch (error) {
+    console.error('Error fetching call logs:', error)
+    return []
+  }
+}
+
+/**
+ * Fetch call logs for a squad (all assistants in the squad)
+ */
+export async function fetchSquadCallLogs(squadId: string): Promise<CallLog[]> {
+  try {
+    // First get the squad to find all assistant IDs
+    const squad = await getSquad(squadId)
+    if (!squad || !squad.members) return []
+
+    // Fetch calls for all assistants in the squad
+    const allCalls: CallLog[] = []
+    for (const member of squad.members) {
+      if (member.assistantId) {
+        const calls = await fetchCallLogs(member.assistantId)
+        allCalls.push(...calls)
+      }
+    }
+
+    // Sort by most recent first
+    return allCalls.sort((a, b) => {
+      const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0
+      const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0
+      return dateB - dateA
+    })
+  } catch (error) {
+    console.error('Error fetching squad call logs:', error)
+    return []
+  }
+}
+
+/**
+ * Get detailed call information including transcript
+ */
+export async function getCallDetails(callId: string): Promise<CallLog | null> {
+  try {
+    return await vapiRequest<CallLog>(`/call/${callId}`)
+  } catch (error) {
+    console.error('Error fetching call details:', error)
+    return null
+  }
+}
+
+/**
+ * Format call duration for display
+ */
+export function formatDuration(seconds?: number): string {
+  if (!seconds) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+/**
+ * Format call date for display
+ */
+export function formatCallDate(dateStr?: string): string {
+  if (!dateStr) return 'Unknown'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * Get caller display name
+ */
+export function getCallerName(call: CallLog): string {
+  if (call.customer?.name) return call.customer.name
+  if (call.customer?.number) return call.customer.number
+  if (call.type === 'webCall') return 'Web Call'
+  return 'Unknown Caller'
+}

@@ -47,6 +47,44 @@ export interface VapiCallStats {
   totalMinutes: number
 }
 
+export interface CallLog {
+  id: string
+  assistantId?: string
+  squadId?: string
+  type: 'inboundPhoneCall' | 'outboundPhoneCall' | 'webCall'
+  status: 'queued' | 'ringing' | 'in-progress' | 'forwarding' | 'ended'
+  endedReason?: string
+  startedAt?: string
+  endedAt?: string
+  duration?: number // in seconds
+  cost?: number
+  // Caller info
+  customer?: {
+    number?: string
+    name?: string
+  }
+  // Transcript
+  transcript?: string
+  messages?: Array<{
+    role: 'assistant' | 'user' | 'system' | 'function_call' | 'function_result' | 'bot'
+    message?: string
+    content?: string
+    time?: number
+  }>
+  // Recording
+  recordingUrl?: string
+  stereoRecordingUrl?: string
+  // Summary/Analysis
+  summary?: string
+  analysis?: {
+    summary?: string
+    successEvaluation?: string
+    structuredData?: Record<string, unknown>
+  }
+}
+
+export type CallStatus = CallLog['status']
+
 // Agent type labels for display
 export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   receptionist: 'Receptionist',

@@ -7,9 +7,10 @@ import { AGENT_TYPE_LABELS, CALL_DIRECTION_LABELS } from "@/lib/agent-types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowUpDown, Pencil, Phone, PhoneIncoming, PhoneOutgoing, User, Clock, Play, Users } from "lucide-react"
+import { ArrowUpDown, Pencil, Phone, PhoneIncoming, PhoneOutgoing, User, Clock, Play, Users, History } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { VapiCallModal } from "./vapi-call-modal"
+import { CallLogsDrawer } from "./call-logs-drawer"
 
 interface AgentsTableProps {
   agents: Agent[]
@@ -27,6 +28,8 @@ export function AgentsTable({ agents, squads = [], onEdit, isLoading }: AgentsTa
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
   const [testingAgent, setTestingAgent] = useState<Agent | null>(null)
   const [testingSquad, setTestingSquad] = useState<Squad | null>(null)
+  const [callLogsAgent, setCallLogsAgent] = useState<Agent | null>(null)
+  const [callLogsSquad, setCallLogsSquad] = useState<Squad | null>(null)
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -43,6 +46,14 @@ export function AgentsTable({ agents, squads = [], onEdit, isLoading }: AgentsTa
 
   const handleTestSquad = (squad: Squad) => {
     setTestingSquad(squad)
+  }
+
+  const handleViewCallLogs = (agent: Agent) => {
+    setCallLogsAgent(agent)
+  }
+
+  const handleViewSquadCallLogs = (squad: Squad) => {
+    setCallLogsSquad(squad)
   }
 
   const filteredSquads = useMemo(() => {
@@ -147,15 +158,25 @@ export function AgentsTable({ agents, squads = [], onEdit, isLoading }: AgentsTa
                       <span>{squad.members?.length || 0} members</span>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTestSquad(squad)}
-                    className="flex items-center gap-1"
-                  >
-                    <Play className="h-4 w-4" />
-                    Test
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewSquadCallLogs(squad)}
+                      title="View call logs"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestSquad(squad)}
+                      className="flex items-center gap-1"
+                    >
+                      <Play className="h-4 w-4" />
+                      Test
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -279,6 +300,14 @@ export function AgentsTable({ agents, squads = [], onEdit, isLoading }: AgentsTa
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleViewCallLogs(agent)}
+                        title="View call logs"
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleTest(agent)}
                         title="Test agent"
                       >
@@ -315,6 +344,22 @@ export function AgentsTable({ agents, squads = [], onEdit, isLoading }: AgentsTa
         onOpenChange={(open) => !open && setTestingSquad(null)}
         squadId={testingSquad?.id}
         name={testingSquad?.name || ''}
+      />
+
+      {/* Call Logs Drawer for Agents */}
+      <CallLogsDrawer
+        open={!!callLogsAgent}
+        onOpenChange={(open) => !open && setCallLogsAgent(null)}
+        assistantId={callLogsAgent?.id}
+        name={callLogsAgent?.name || ''}
+      />
+
+      {/* Call Logs Drawer for Squads */}
+      <CallLogsDrawer
+        open={!!callLogsSquad}
+        onOpenChange={(open) => !open && setCallLogsSquad(null)}
+        squadId={callLogsSquad?.id}
+        name={callLogsSquad?.name || ''}
       />
     </div>
   )
