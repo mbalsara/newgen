@@ -165,8 +165,6 @@ jobs:
             --cpu=1
           env_vars: |
             NODE_ENV=production
-          secrets: |
-            VAPI_API_KEY=VAPI_API_KEY:latest
 
       - name: Show deployed URL
         run: |

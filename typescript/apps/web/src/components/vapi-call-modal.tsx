@@ -12,8 +12,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { env } from "@/lib/env"
 
-const VAPI_PUBLIC_KEY = import.meta.env.VITE_VAPI_PUBLIC_KEY || import.meta.env.VITE_VAPI_API_KEY || ''
+const VAPI_PUBLIC_KEY = env.VITE_VAPI_PUBLIC_KEY || ''
 
 interface VapiCallModalProps {
   open: boolean

@@ -5,10 +5,11 @@
  */
 
 import type { Agent, VapiVoice, VoiceGender, VapiCallStats, AgentFormData } from './agent-types'
+import { env } from './env'
 
 // Use API server proxy for VAPI calls to avoid CORS issues
 // In development, the API runs locally; in production, it's on Cloud Run
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_BASE_URL = env.VITE_API_URL || 'http://localhost:3001'
 const VAPI_BASE_URL = `${API_BASE_URL}/api/vapi`
 
 // Helper for VAPI requests
