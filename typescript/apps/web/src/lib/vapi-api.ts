@@ -6,9 +6,10 @@
 
 import type { Agent, VapiVoice, VoiceGender, VapiCallStats, AgentFormData } from './agent-types'
 
-// Use proxy in development to avoid CORS issues
-// The proxy is configured in vite.config.ts to forward to api.vapi.ai
-const VAPI_BASE_URL = '/api/vapi'
+// Use API server proxy for VAPI calls to avoid CORS issues
+// In development, the API runs locally; in production, it's on Cloud Run
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const VAPI_BASE_URL = `${API_BASE_URL}/api/vapi`
 
 // Helper for VAPI requests
 async function vapiRequest<T>(
