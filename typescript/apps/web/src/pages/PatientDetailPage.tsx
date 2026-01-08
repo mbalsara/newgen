@@ -1,4 +1,4 @@
-import { useParams, Navigate } from "react-router-dom"
+import { useParams, Navigate } from "react-router"
 import { patientDetails, type PatientId } from "@/lib/mock-patient-details"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"

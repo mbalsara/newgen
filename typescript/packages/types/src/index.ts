@@ -13,3 +13,5 @@ export interface ApiResponse<T = any> {
 }
 
 export * from './appointment'
+export * from './schemas'
+

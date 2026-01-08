@@ -1,11 +1,17 @@
+// Load environment variables BEFORE other imports
+// Load .env first, then .env.local (local overrides base)
+import { config } from 'dotenv'
+config({ path: '.env' })
+config({ path: '.env.local', override: true })
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
-import dotenv from 'dotenv'
 import { createYoga } from 'graphql-yoga'
 import { schema } from './graphql/schema.js'
-
-dotenv.config()
+import { agentRoutes } from './agents/routes.js'
+import { taskRoutes } from './tasks/routes.js'
+import { callRoutes } from './calls/routes.js'
 
 const app = new Hono()
 
@@ -20,6 +26,15 @@ app.get('/health', (c) => {
     timestamp: new Date().toISOString(),
   })
 })
+
+// =============================================================================
+// REST API Routes
+// =============================================================================
+
+// Mount REST API routes
+app.route('/api/agents', agentRoutes)
+app.route('/api/tasks', taskRoutes)
+app.route('/api/calls', callRoutes)
 
 // =============================================================================
 // VAPI Proxy Routes
@@ -51,9 +66,20 @@ app.all('/api/vapi/*', async (c) => {
       : undefined,
   })
 
-  // Return the VAPI response
-  const data = await response.json()
-  return c.json(data, response.status as 200)
+  // Handle empty responses (e.g., DELETE, some POST endpoints)
+  const text = await response.text()
+  if (!text) {
+    return c.json({ success: true }, response.status as 200)
+  }
+
+  // Return the VAPI response as JSON
+  try {
+    const data = JSON.parse(text)
+    return c.json(data, response.status as 200)
+  } catch {
+    // If not valid JSON, return as message
+    return c.json({ message: text }, response.status as 200)
+  }
 })
 
 // GraphQL endpoint

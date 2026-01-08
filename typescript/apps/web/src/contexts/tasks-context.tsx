@@ -1,17 +1,54 @@
 import * as React from 'react'
 import type {
-  Task,
+  Task as FrontendTask,
   TaskFilters,
-  TaskStatus,
   PatientBehaviorFlag,
   PatientFlagReason,
 } from '@/lib/task-types'
-import { mockTasks, patientFlags as initialPatientFlags } from '@/lib/mock-tasks'
-import { getAgent } from '@/lib/mock-agents'
+import { api, type TaskWithPatient, type Task as ApiTask } from '@/lib/api-client'
 import { useCurrentUser } from '@/contexts/user-context'
 
+// Convert API task (with patient) to frontend task format
+function convertApiTaskToFrontend(apiTask: TaskWithPatient): FrontendTask {
+  return {
+    id: apiTask.id,
+    patient: {
+      id: apiTask.patient.id,
+      name: apiTask.patient.name,
+      phone: apiTask.patient.phone || '',
+      dob: apiTask.patient.dob || '',
+    },
+    provider: apiTask.provider,
+    type: apiTask.type,
+    status: apiTask.status,
+    assignedAgent: apiTask.assignedAgentId || '',
+    time: apiTask.time || '',
+    unread: apiTask.unread,
+    amount: apiTask.amount ?? undefined,
+    description: apiTask.description,
+    ehrSync: apiTask.ehrSync,
+    // Cast timeline through unknown since API returns generic type
+    timeline: apiTask.timeline as unknown as FrontendTask['timeline'],
+  }
+}
+
+// Merge API task update with existing frontend task (keeps patient data)
+function mergeTaskUpdate(existingTask: FrontendTask, updatedTask: ApiTask): FrontendTask {
+  return {
+    ...existingTask,
+    status: updatedTask.status,
+    assignedAgent: updatedTask.assignedAgentId || '',
+    time: updatedTask.time || existingTask.time,
+    unread: updatedTask.unread,
+    amount: updatedTask.amount ?? existingTask.amount,
+    description: updatedTask.description,
+    ehrSync: updatedTask.ehrSync,
+    timeline: updatedTask.timeline as unknown as FrontendTask['timeline'],
+  }
+}
+
 interface TasksState {
-  tasks: Task[]
+  tasks: FrontendTask[]
   selectedTaskId: number | null
   filters: TaskFilters
   patientFlags: Record<string, PatientBehaviorFlag>
@@ -19,18 +56,20 @@ interface TasksState {
   expandedEvents: Record<string, boolean>
   editingObjective: { taskId: number; eventId: string; itemIndex: number } | null
   refreshing: boolean
+  loading: boolean
+  error: string | null
 }
 
 interface TasksContextValue extends TasksState {
   // Selection
   selectTask: (id: number) => void
   clearSelection: () => void
-  getSelectedTask: () => Task | undefined
+  getSelectedTask: () => FrontendTask | undefined
 
   // Filters
   setFilters: (filters: Partial<TaskFilters>) => void
   clearFilters: () => void
-  getFilteredTasks: () => Task[]
+  getFilteredTasks: () => FrontendTask[]
   getActiveFilterCount: () => number
 
   // Task actions
@@ -46,6 +85,12 @@ interface TasksContextValue extends TasksState {
   removePatientFlag: (patientId: string) => void
   isPatientFlagged: (patientId: string) => boolean
   getPatientFlag: (patientId: string) => PatientBehaviorFlag | undefined
+
+  // Call completion handling
+  handleCallCompletion: (
+    taskId: number,
+    callId: string
+  ) => Promise<{ action: 'completed' | 'escalated' | 'flagged'; message: string }>
 
   // EHR Sync
   syncTask: (taskId: number) => Promise<void>
@@ -69,10 +114,10 @@ interface TasksContextValue extends TasksState {
 
   // Queue data
   getQueueData: () => {
-    scheduled: Task[]
-    inProgress: Task[]
-    needsAttention: Task[]
-    completed: Task[]
+    scheduled: FrontendTask[]
+    inProgress: FrontendTask[]
+    needsAttention: FrontendTask[]
+    completed: FrontendTask[]
   }
 
   // Stats
@@ -94,10 +139,10 @@ const initialFilters: TaskFilters = {
 
 export function TasksProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useCurrentUser()
-  const [tasks, setTasks] = React.useState<Task[]>(mockTasks)
-  const [selectedTaskId, setSelectedTaskId] = React.useState<number | null>(mockTasks[0]?.id ?? null)
+  const [tasks, setTasks] = React.useState<FrontendTask[]>([])
+  const [selectedTaskId, setSelectedTaskId] = React.useState<number | null>(null)
   const [filters, setFiltersState] = React.useState<TaskFilters>(initialFilters)
-  const [patientFlags, setPatientFlags] = React.useState<Record<string, PatientBehaviorFlag>>(initialPatientFlags)
+  const [patientFlags, setPatientFlags] = React.useState<Record<string, PatientBehaviorFlag>>({})
   const [syncingTasks, setSyncingTasks] = React.useState<Record<number, boolean>>({})
   const [expandedEvents, setExpandedEvents] = React.useState<Record<string, boolean>>({})
   const [editingObjective, setEditingObjective] = React.useState<{
@@ -106,14 +151,63 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     itemIndex: number
   } | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // Agents cache for display names
+  const [agentsMap, setAgentsMap] = React.useState<Record<string, { name: string; type: string }>>({})
+
+  // Load tasks from API on mount
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Load tasks and agents in parallel
+        const [apiTasks, agents] = await Promise.all([
+          api.tasks.list(),
+          api.agents.list(),
+        ])
+
+        // Build agents map
+        const agentMap: Record<string, { name: string; type: string }> = {}
+        for (const agent of agents) {
+          agentMap[agent.id] = { name: agent.name, type: agent.type }
+        }
+        setAgentsMap(agentMap)
+
+        // Convert and set tasks
+        const frontendTasks = apiTasks.map(convertApiTaskToFrontend)
+        setTasks(frontendTasks)
+
+        // Select first task if any
+        if (frontendTasks.length > 0 && !selectedTaskId) {
+          setSelectedTaskId(frontendTasks[0].id)
+        }
+      } catch (err) {
+        console.error('Error loading tasks:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load tasks')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [])
 
   // Selection
-  const selectTask = React.useCallback((id: number) => {
+  const selectTask = React.useCallback(async (id: number) => {
     setSelectedTaskId(id)
-    // Mark as read when selected
-    setTasks(prev =>
-      prev.map(task => (task.id === id ? { ...task, unread: false } : task))
-    )
+    // Mark as read via API
+    try {
+      await api.tasks.markAsRead(id)
+      setTasks(prev =>
+        prev.map(task => (task.id === id ? { ...task, unread: false } : task))
+      )
+    } catch (err) {
+      console.error('Error marking task as read:', err)
+    }
   }, [])
 
   const clearSelection = React.useCallback(() => {
@@ -161,113 +255,74 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   }, [filters])
 
   // Task actions
-  const markTaskRead = React.useCallback((id: number) => {
-    setTasks(prev =>
-      prev.map(task => (task.id === id ? { ...task, unread: false } : task))
-    )
-  }, [])
-
-  const markTaskDone = React.useCallback((id: number) => {
-    setTasks(prev =>
-      prev.map(task => {
-        if (task.id !== id) return task
-        const completedEvent = {
-          id: `completed-${id}-${Date.now()}`,
-          type: 'completed' as const,
-          timestamp: new Date().toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          }),
-          title: 'Task Completed',
-          description: 'Task marked as completed.',
-        }
-        return {
-          ...task,
-          status: 'completed' as TaskStatus,
-          timeline: [...task.timeline, completedEvent],
-        }
-      })
-    )
-  }, [])
-
-  const reopenTask = React.useCallback((id: number) => {
-    setTasks(prev =>
-      prev.map(task => {
-        if (task.id !== id) return task
-        // Remove the last completed event if exists
-        const timeline = task.timeline.filter(
-          (e, i) => !(e.type === 'completed' && i === task.timeline.length - 1)
-        )
-        return { ...task, status: 'in-progress' as TaskStatus, timeline }
-      })
-    )
-  }, [])
-
-  const escalateTask = React.useCallback(
-    (id: number, reason: string, assignTo: string) => {
-      const agent = getAgent(assignTo)
+  const markTaskRead = React.useCallback(async (id: number) => {
+    try {
+      await api.tasks.markAsRead(id)
       setTasks(prev =>
-        prev.map(task => {
-          if (task.id !== id) return task
-          const escalatedEvent = {
-            id: `escalated-${id}-${Date.now()}`,
-            type: 'escalated' as const,
-            timestamp: new Date().toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true,
-            }),
-            title: 'Escalated to Staff',
-            assignedTo: agent?.name || assignTo,
-            reason,
-          }
-          return {
-            ...task,
-            status: 'escalated' as TaskStatus,
-            assignedAgent: assignTo,
-            timeline: [...task.timeline, escalatedEvent],
-          }
-        })
+        prev.map(task => (task.id === id ? { ...task, unread: false } : task))
       )
-    },
-    []
-  )
-
-  const assignTask = React.useCallback((taskId: number, agentId: string) => {
-    setTasks(prev =>
-      prev.map(task => (task.id === taskId ? { ...task, assignedAgent: agentId } : task))
-    )
+    } catch (err) {
+      console.error('Error marking task as read:', err)
+    }
   }, [])
 
-  const addNoteToTask = React.useCallback((taskId: number, note: string) => {
-    const now = new Date().toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
-    setTasks(prev =>
-      prev.map(task => {
-        if (task.id !== taskId) return task
-        const noteEvent = {
-          id: `note-${taskId}-${Date.now()}`,
-          type: 'note' as const,
-          timestamp: now,
-          title: 'Note Added',
-          content: note,
-        }
-        return { ...task, timeline: [...task.timeline, noteEvent] }
-      })
-    )
+  const markTaskDone = React.useCallback(async (id: number) => {
+    try {
+      const updatedTask = await api.tasks.complete(id)
+      setTasks(prev =>
+        prev.map(task => (task.id === id ? mergeTaskUpdate(task, updatedTask) : task))
+      )
+    } catch (err) {
+      console.error('Error completing task:', err)
+    }
   }, [])
 
-  // Patient flags
+  const reopenTask = React.useCallback(async (id: number) => {
+    try {
+      const updatedTask = await api.tasks.update(id, { status: 'in-progress' })
+      setTasks(prev =>
+        prev.map(task => (task.id === id ? mergeTaskUpdate(task, updatedTask) : task))
+      )
+    } catch (err) {
+      console.error('Error reopening task:', err)
+    }
+  }, [])
+
+  const escalateTask = React.useCallback(async (id: number, reason: string, assignTo: string) => {
+    try {
+      const updatedTask = await api.tasks.escalate(id, assignTo, reason)
+      setTasks(prev =>
+        prev.map(task => (task.id === id ? mergeTaskUpdate(task, updatedTask) : task))
+      )
+    } catch (err) {
+      console.error('Error escalating task:', err)
+    }
+  }, [])
+
+  const assignTask = React.useCallback(async (taskId: number, agentId: string) => {
+    try {
+      const agentName = agentsMap[agentId]?.name || agentId
+      const updatedTask = await api.tasks.reassign(taskId, agentId, agentName)
+      setTasks(prev =>
+        prev.map(task => (task.id === taskId ? mergeTaskUpdate(task, updatedTask) : task))
+      )
+    } catch (err) {
+      console.error('Error assigning task:', err)
+    }
+  }, [agentsMap])
+
+  const addNoteToTask = React.useCallback(async (taskId: number, note: string) => {
+    try {
+      const updatedTask = await api.tasks.addNote(taskId, note)
+      setTasks(prev =>
+        prev.map(task => (task.id === taskId ? mergeTaskUpdate(task, updatedTask) : task))
+      )
+    } catch (err) {
+      console.error('Error adding note:', err)
+    }
+  }, [])
+
+  // Patient flags (kept local for now, could be moved to backend)
   const flagPatient = React.useCallback(
     (patientId: string, reason: PatientFlagReason, notes: string, flaggedBy: string) => {
       const now = new Date().toLocaleString('en-US', {
@@ -281,23 +336,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         [patientId]: { flagged: true, reason, notes, flaggedBy, flaggedAt: now },
       }))
-
-      // Add flag event to task timeline if task exists for this patient
-      setTasks(prev =>
-        prev.map(task => {
-          if (task.patient.id !== patientId) return task
-          const flagEvent = {
-            id: `flag-${task.id}-${Date.now()}`,
-            type: 'flag' as const,
-            timestamp: now,
-            title: 'Patient Flagged',
-            reason: reason.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            notes,
-            flaggedBy,
-          }
-          return { ...task, timeline: [...task.timeline, flagEvent] }
-        })
-      )
     },
     []
   )
@@ -322,6 +360,39 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       return patientFlags[patientId]
     },
     [patientFlags]
+  )
+
+  // Handle call completion - now uses backend API
+  const handleCallCompletion = React.useCallback(
+    async (
+      taskId: number,
+      callId: string
+    ): Promise<{ action: 'completed' | 'escalated' | 'flagged'; message: string }> => {
+      try {
+        // Process call completion on backend
+        const result = await api.calls.processCompletion(callId)
+
+        // Refresh the task to get updated data
+        const updatedTask = await api.tasks.getById(taskId)
+        setTasks(prev =>
+          prev.map(task => (task.id === taskId ? convertApiTaskToFrontend(updatedTask) : task))
+        )
+
+        // Handle patient flag if needed
+        if (result.action === 'flagged') {
+          const task = tasks.find(t => t.id === taskId)
+          if (task) {
+            flagPatient(task.patient.id, 'abusive-language', 'Detected during call', 'AI Agent')
+          }
+        }
+
+        return result
+      } catch (err) {
+        console.error('Error processing call completion:', err)
+        return { action: 'escalated', message: 'Error processing call - requires manual review' }
+      }
+    },
+    [tasks, flagPatient]
   )
 
   // EHR Sync
@@ -384,9 +455,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
             ...task,
             timeline: task.timeline.map(event => {
               if (event.id !== eventId || event.type !== 'objectives') return event
-              const items = [...event.items]
+              // Cast to any for timeline manipulation, then back
+              const objectivesEvent = event as unknown as { items: Array<{ text: string; status: string; patientResponse: string }> }
+              const items = [...objectivesEvent.items]
               items[itemIndex] = { ...items[itemIndex], patientResponse: response, status }
-              return { ...event, items }
+              return { ...event, items } as typeof event
             }),
           }
         })
@@ -405,9 +478,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
             ...task,
             timeline: task.timeline.map(event => {
               if (event.id !== eventId || event.type !== 'next-steps') return event
-              const items = [...event.items]
+              // Cast to any for timeline manipulation, then back
+              const nextStepsEvent = event as unknown as { items: Array<{ text: string; done: boolean }> }
+              const items = [...nextStepsEvent.items]
               items[itemIndex] = { ...items[itemIndex], done: !items[itemIndex].done }
-              return { ...event, items }
+              return { ...event, items } as typeof event
             }),
           }
         })
@@ -416,11 +491,18 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
-  // Refresh
+  // Refresh - fetches fresh data from API
   const refresh = React.useCallback(async () => {
     setRefreshing(true)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setRefreshing(false)
+    try {
+      const apiTasks = await api.tasks.list()
+      const frontendTasks = apiTasks.map(convertApiTaskToFrontend)
+      setTasks(frontendTasks)
+    } catch (err) {
+      console.error('Error refreshing tasks:', err)
+    } finally {
+      setRefreshing(false)
+    }
   }, [])
 
   // Queue data
@@ -437,13 +519,13 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   // Stats
   const getStats = React.useCallback(() => {
     const completed = tasks.filter(t => t.status === 'completed').length
-    const aiHandled = tasks.filter(t => getAgent(t.assignedAgent)?.type === 'ai').length
+    const aiHandled = tasks.filter(t => agentsMap[t.assignedAgent]?.type === 'ai').length
     const aiRate = tasks.length > 0 ? Math.round((aiHandled / tasks.length) * 100) : 0
     // Mock money saved calculation: $12.50 (manual) - $0.85 (AI) = $11.65 per AI task
     const moneySaved = aiHandled * 11.65
 
     return { completed, aiRate, moneySaved }
-  }, [tasks])
+  }, [tasks, agentsMap])
 
   const value: TasksContextValue = {
     tasks,
@@ -454,6 +536,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     expandedEvents,
     editingObjective,
     refreshing,
+    loading,
+    error,
     selectTask,
     clearSelection,
     getSelectedTask,
@@ -471,6 +555,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     removePatientFlag,
     isPatientFlagged,
     getPatientFlag,
+    handleCallCompletion,
     syncTask,
     isSyncing,
     toggleEventExpanded,
