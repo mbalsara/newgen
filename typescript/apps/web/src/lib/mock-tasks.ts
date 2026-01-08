@@ -21,7 +21,11 @@ export function getPatientFlag(patientId: string): PatientBehaviorFlag | undefin
   return patientFlags[patientId]
 }
 
-// Mock tasks data
+// Mock tasks data - agents mapped to task types:
+// ai-luna: Appointment Confirmation
+// ai-max: No-Show Follow Up
+// ai-nova: Pre-Visit Preparation
+// ai-aria: Annual Recall
 export const mockTasks: Task[] = [
   {
     id: 1,
@@ -29,7 +33,7 @@ export const mockTasks: Task[] = [
     provider: 'Dr. Martinez',
     type: 'confirmation',
     status: 'in-progress',
-    assignedAgent: 'ai-luna',
+    assignedAgent: 'ai-luna', // Appointment Confirmation agent
     time: '2m ago',
     unread: true,
     description: 'Appointment confirmation for Jan 15 at 2:30 PM',
@@ -90,7 +94,7 @@ export const mockTasks: Task[] = [
     provider: 'Dr. Patel',
     type: 'no-show',
     status: 'escalated',
-    assignedAgent: 'sarah',
+    assignedAgent: 'sarah', // Escalated to staff
     time: '15m ago',
     unread: true,
     description: 'Patient no-show for appointment on Jan 5',
@@ -115,7 +119,7 @@ export const mockTasks: Task[] = [
         transcript: [
           {
             speaker: 'ai',
-            text: "Hello, this is Luna from Dr. Patel's office calling about your missed appointment on January 5th.",
+            text: "Hello, this is Max from Dr. Patel's office calling about your missed appointment on January 5th.",
             time: '9:15 AM',
           },
           { speaker: 'patient', text: 'What do you want? I already know I missed it.', time: '9:15 AM' },
@@ -138,7 +142,7 @@ export const mockTasks: Task[] = [
         timestamp: 'Jan 7, 9:16 AM',
         title: 'Patient Flagged',
         reason: 'Abusive Language',
-        flaggedBy: 'Luna (AI)',
+        flaggedBy: 'Max (AI)',
         notes: 'Patient used profanity and raised voice during call about billing dispute.',
       },
       {
@@ -167,7 +171,7 @@ export const mockTasks: Task[] = [
     provider: 'Dr. Kim',
     type: 'pre-visit',
     status: 'in-progress',
-    assignedAgent: 'ai-luna',
+    assignedAgent: 'ai-nova', // Pre-Visit Preparation agent
     time: '1h ago',
     unread: false,
     description: 'Pre-visit call for procedure on Jan 10',
@@ -192,7 +196,7 @@ export const mockTasks: Task[] = [
         transcript: [
           {
             speaker: 'ai',
-            text: "Hello Emily! This is Luna from Dr. Kim's office calling about your procedure on January 10th.",
+            text: "Hello Emily! This is Nova from Dr. Kim's office calling about your procedure on January 10th.",
             time: '10:30 AM',
           },
           { speaker: 'patient', text: "Oh yes, hi! I've been preparing for it.", time: '10:30 AM' },
@@ -255,12 +259,12 @@ export const mockTasks: Task[] = [
     id: 4,
     patient: { name: 'James Wilson', phone: '(555) 234-5678', id: 'PT-4521', dob: '05/30/1965' },
     provider: 'Dr. Lee',
-    type: 'post-visit',
-    status: 'completed',
-    assignedAgent: 'ai-max',
+    type: 'no-show',
+    status: 'in-progress',
+    assignedAgent: 'ai-max', // No-Show Follow Up agent
     time: '2h ago',
     unread: false,
-    description: 'Post-visit follow-up for Jan 6 appointment',
+    description: 'Patient no-show for appointment on Jan 6',
     ehrSync: { status: 'synced', lastSync: 'Jan 7, 8:10 AM' },
     timeline: [
       {
@@ -268,7 +272,7 @@ export const mockTasks: Task[] = [
         type: 'created',
         timestamp: 'Jan 7, 7:45 AM',
         title: 'Task Created',
-        description: 'Post-visit follow-up for Jan 6 appointment',
+        description: 'Patient no-show for appointment on Jan 6',
       },
       {
         id: 'voice-4',
@@ -277,28 +281,31 @@ export const mockTasks: Task[] = [
         title: 'Voice Call',
         duration: '3:12',
         status: 'completed',
-        summary: 'Follow-up call completed. Patient confirmed understanding of care instructions.',
+        summary: 'Patient apologized for missing appointment. Had a family emergency. Wants to reschedule.',
         transcript: [
           {
             speaker: 'ai',
-            text: "Hello Mr. Wilson, this is Max from Dr. Lee's office about your visit yesterday.",
+            text: "Hello Mr. Wilson, this is Max from Dr. Lee's office. I'm calling about your missed appointment yesterday.",
             time: '8:00 AM',
           },
-          { speaker: 'patient', text: 'Yes, hello!', time: '8:00 AM' },
+          { speaker: 'patient', text: "Oh yes, I'm so sorry about that. I had a family emergency.", time: '8:00 AM' },
           {
             speaker: 'ai',
-            text: 'Any questions about your care instructions or medications?',
+            text: 'I understand. Would you like to reschedule your appointment?',
             time: '8:01 AM',
           },
-          { speaker: 'patient', text: 'No, everything is clear.', time: '8:01 AM' },
+          { speaker: 'patient', text: 'Yes please, as soon as possible.', time: '8:01 AM' },
         ],
       },
       {
-        id: 'completed-4',
-        type: 'completed',
+        id: 'next-4',
+        type: 'next-steps',
         timestamp: 'Jan 7, 8:05 AM',
-        title: 'Task Completed',
-        description: 'All objectives met.',
+        title: 'Next Steps',
+        items: [
+          { text: 'Schedule new appointment', done: false },
+          { text: 'Waive no-show fee due to emergency', done: false },
+        ],
       },
     ],
   },
@@ -306,13 +313,12 @@ export const mockTasks: Task[] = [
     id: 5,
     patient: { name: 'Patricia Brown', phone: '(555) 345-6789', id: 'PT-2089', dob: '09/14/1970' },
     provider: 'Dr. Martinez',
-    type: 'collections',
+    type: 'confirmation',
     status: 'pending',
-    assignedAgent: 'ai-nova',
+    assignedAgent: 'ai-luna', // Appointment Confirmation agent
     time: '3h ago',
-    amount: '$245.00',
     unread: false,
-    description: 'Outstanding balance from Nov 15 visit',
+    description: 'Appointment confirmation for Jan 12 at 10:00 AM',
     ehrSync: { status: 'pending', lastSync: null },
     timeline: [
       {
@@ -320,16 +326,7 @@ export const mockTasks: Task[] = [
         type: 'created',
         timestamp: 'Jan 7, 6:00 AM',
         title: 'Task Created',
-        description: 'Outstanding balance from Nov 15 visit',
-      },
-      {
-        id: 'balance-5',
-        type: 'balance',
-        timestamp: '',
-        title: 'Outstanding Balance',
-        amount: '$245.00',
-        dueDate: 'Dec 15, 2024',
-        daysPastDue: 23,
+        description: 'Appointment confirmation for Jan 12 at 10:00 AM',
       },
       {
         id: 'next-5',
@@ -337,8 +334,8 @@ export const mockTasks: Task[] = [
         timestamp: '',
         title: 'Next Steps',
         items: [
-          { text: 'Attempt initial contact', done: false },
-          { text: 'Offer payment plan options', done: false },
+          { text: 'Call patient to confirm appointment', done: false },
+          { text: 'Verify insurance information', done: false },
         ],
       },
     ],
@@ -348,8 +345,8 @@ export const mockTasks: Task[] = [
     patient: { name: 'Robert Taylor', phone: '(555) 567-8901', id: 'PT-3847', dob: '02/28/1958' },
     provider: 'Dr. Patel',
     type: 'recall',
-    status: 'pending',
-    assignedAgent: 'john',
+    status: 'in-progress',
+    assignedAgent: 'ai-aria', // Annual Recall agent
     time: '4h ago',
     unread: false,
     description: 'Annual checkup recall - last visit Feb 2024',
@@ -363,11 +360,37 @@ export const mockTasks: Task[] = [
         description: 'Annual checkup recall - last visit Feb 2024',
       },
       {
+        id: 'voice-6',
+        type: 'voice',
+        timestamp: 'Jan 7, 5:30 AM',
+        title: 'Voice Call',
+        duration: '2:15',
+        status: 'completed',
+        summary: 'Patient interested in scheduling annual checkup. Prefers morning appointments.',
+        transcript: [
+          {
+            speaker: 'ai',
+            text: "Hello Mr. Taylor, this is Aria from Dr. Patel's office. I'm calling because it's been about a year since your last checkup.",
+            time: '5:30 AM',
+          },
+          { speaker: 'patient', text: "Oh yes, time flies! I should schedule that.", time: '5:30 AM' },
+          {
+            speaker: 'ai',
+            text: "Would you like me to help you schedule your annual wellness visit?",
+            time: '5:31 AM',
+          },
+          { speaker: 'patient', text: "Yes, I prefer mornings if possible.", time: '5:31 AM' },
+        ],
+      },
+      {
         id: 'next-6',
         type: 'next-steps',
-        timestamp: '',
+        timestamp: 'Jan 7, 5:35 AM',
         title: 'Next Steps',
-        items: [{ text: 'Contact patient to schedule annual checkup', done: false }],
+        items: [
+          { text: 'Schedule morning appointment for annual checkup', done: false },
+          { text: 'Send appointment confirmation', done: false },
+        ],
       },
     ],
   },
@@ -377,7 +400,7 @@ export const mockTasks: Task[] = [
     provider: 'Dr. Kim',
     type: 'pre-visit',
     status: 'completed',
-    assignedAgent: 'ai-luna',
+    assignedAgent: 'ai-nova', // Pre-Visit Preparation agent
     time: '5h ago',
     unread: false,
     description: 'Pre-visit call for checkup on Jan 8',
@@ -401,7 +424,7 @@ export const mockTasks: Task[] = [
         transcript: [
           {
             speaker: 'ai',
-            text: "Hello! This is Luna from Dr. Kim's office calling about your appointment tomorrow.",
+            text: "Hello! This is Nova from Dr. Kim's office calling about your appointment tomorrow.",
             time: '4:15 AM',
           },
           { speaker: 'patient', text: "Yes, I'm ready for it.", time: '4:15 AM' },
@@ -448,12 +471,12 @@ export const mockTasks: Task[] = [
     id: 8,
     patient: { name: 'David Kim', phone: '(555) 789-0123', id: 'PT-5234', dob: '08/25/1975' },
     provider: 'Dr. Lee',
-    type: 'post-visit',
+    type: 'recall',
     status: 'completed',
-    assignedAgent: 'ai-max',
+    assignedAgent: 'ai-aria', // Annual Recall agent
     time: '6h ago',
     unread: false,
-    description: 'Post-visit follow-up for Jan 6 appointment',
+    description: 'Annual checkup recall - last visit Jan 2024',
     ehrSync: { status: 'synced', lastSync: 'Jan 6, 4:10 PM' },
     timeline: [
       {
@@ -461,7 +484,7 @@ export const mockTasks: Task[] = [
         type: 'created',
         timestamp: 'Jan 6, 3:00 PM',
         title: 'Task Created',
-        description: 'Post-visit follow-up for Jan 6 appointment',
+        description: 'Annual checkup recall - last visit Jan 2024',
       },
       {
         id: 'voice-8',
@@ -470,14 +493,14 @@ export const mockTasks: Task[] = [
         title: 'Voice Call',
         duration: '2:30',
         status: 'completed',
-        summary: 'Patient doing well post-procedure. No complications.',
+        summary: 'Patient scheduled annual checkup for Feb 10. All set.',
         transcript: [
           {
             speaker: 'ai',
-            text: "Hello Mr. Kim, this is Max calling from Dr. Lee's office.",
+            text: "Hello Mr. Kim, this is Aria calling from Dr. Lee's office. It's time for your annual wellness visit!",
             time: '4:00 PM',
           },
-          { speaker: 'patient', text: 'Hi, everything is going well.', time: '4:00 PM' },
+          { speaker: 'patient', text: "Perfect timing, I was just thinking about that.", time: '4:00 PM' },
         ],
       },
       {
@@ -485,7 +508,7 @@ export const mockTasks: Task[] = [
         type: 'completed',
         timestamp: 'Jan 6, 4:05 PM',
         title: 'Task Completed',
-        description: 'Follow-up complete.',
+        description: 'Annual checkup scheduled for Feb 10.',
       },
     ],
   },

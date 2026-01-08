@@ -8,8 +8,9 @@ import type { Agent, VapiVoice, VoiceGender, VapiCallStats, AgentFormData } from
 import { env } from './env'
 
 // Use API server proxy for VAPI calls to avoid CORS issues
-// In development, the API runs locally; in production, it's on Cloud Run
-const API_BASE_URL = env.VITE_API_URL || 'http://localhost:3001'
+// In development, Vite proxies /api to localhost:3001
+// In production, VITE_API_URL points to the API server
+const API_BASE_URL = env.VITE_API_URL || ''
 const VAPI_BASE_URL = `${API_BASE_URL}/api/vapi`
 
 // Helper for VAPI requests
@@ -528,4 +529,78 @@ export function getCallerName(call: CallLog): string {
   if (call.customer?.number) return call.customer.number
   if (call.type === 'webCall') return 'Web Call'
   return 'Unknown Caller'
+}
+
+// ============================================================================
+// OUTBOUND CALLS
+// ============================================================================
+
+/**
+ * Start an outbound phone call
+ */
+export async function startOutboundCall(
+  assistantId: string,
+  phoneNumber: string
+): Promise<{ callId: string }> {
+  // First, get the available phone numbers to use as caller ID
+  const phoneNumbers = await vapiRequest<Array<{ id: string; number: string; status: string }>>('/phone-number')
+
+  // Find an active phone number to use
+  const activePhone = phoneNumbers.find(p => p.status === 'active') || phoneNumbers[0]
+
+  if (!activePhone) {
+    throw new Error('No phone number configured in Vapi. Please add a phone number in the Vapi dashboard.')
+  }
+
+  const response = await vapiRequest<{ id: string }>('/call', 'POST', {
+    assistantId,
+    type: 'outboundPhoneCall',
+    phoneNumberId: activePhone.id,
+    customer: { number: phoneNumber }
+  })
+  return { callId: response.id }
+}
+
+/**
+ * Outbound call status response
+ */
+export interface OutboundCallStatus {
+  id: string
+  status: 'queued' | 'ringing' | 'in-progress' | 'forwarding' | 'ended'
+  endedReason?: string
+  transcript?: string
+  messages?: Array<{
+    role: 'assistant' | 'user' | 'system' | 'bot' | 'tool_calls' | 'tool_call_result'
+    message?: string
+    content?: string
+    text?: string
+    time?: number
+    secondsFromStart?: number
+  }>
+  artifact?: {
+    messages?: Array<{
+      role: string
+      message?: string
+      content?: string
+      text?: string
+    }>
+    transcript?: string
+  }
+  startedAt?: string
+  endedAt?: string
+}
+
+/**
+ * Get call status and transcript for polling
+ */
+export async function getOutboundCallStatus(callId: string): Promise<OutboundCallStatus> {
+  return vapiRequest<OutboundCallStatus>(`/call/${callId}`)
+}
+
+/**
+ * End an active call
+ */
+export async function endOutboundCall(callId: string): Promise<void> {
+  // Use DELETE to end the call (Vapi API)
+  await vapiRequest(`/call/${callId}`, 'DELETE')
 }

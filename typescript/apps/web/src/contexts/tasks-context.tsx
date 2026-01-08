@@ -39,6 +39,7 @@ interface TasksContextValue extends TasksState {
   reopenTask: (id: number) => void
   escalateTask: (id: number, reason: string, assignTo: string) => void
   assignTask: (taskId: number, agentId: string) => void
+  addNoteToTask: (taskId: number, note: string) => void
 
   // Patient flags
   flagPatient: (patientId: string, reason: PatientFlagReason, notes: string, flaggedBy: string) => void
@@ -243,6 +244,29 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  const addNoteToTask = React.useCallback((taskId: number, note: string) => {
+    const now = new Date().toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+    setTasks(prev =>
+      prev.map(task => {
+        if (task.id !== taskId) return task
+        const noteEvent = {
+          id: `note-${taskId}-${Date.now()}`,
+          type: 'note' as const,
+          timestamp: now,
+          title: 'Note Added',
+          content: note,
+        }
+        return { ...task, timeline: [...task.timeline, noteEvent] }
+      })
+    )
+  }, [])
+
   // Patient flags
   const flagPatient = React.useCallback(
     (patientId: string, reason: PatientFlagReason, notes: string, flaggedBy: string) => {
@@ -442,6 +466,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     reopenTask,
     escalateTask,
     assignTask,
+    addNoteToTask,
     flagPatient,
     removePatientFlag,
     isPatientFlagged,

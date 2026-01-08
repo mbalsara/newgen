@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ExternalLink, Flag, Check } from 'lucide-react'
+import { ExternalLink, Flag, Check, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -10,6 +10,7 @@ import { AgentSelector } from '@/components/agents/agent-selector'
 import { PatientFlagBanner } from '@/components/patients/patient-flag-banner'
 import { PatientFlagModal } from '@/components/patients/patient-flag-modal'
 import { TaskTimeline } from './task-timeline'
+import { OutboundCallPanel } from './outbound-call-panel'
 
 const statusColors: Record<string, string> = {
   'in-progress': 'bg-amber-500 text-white',
@@ -40,6 +41,7 @@ export function TaskDetailPanel() {
   } = useTasks()
 
   const [showFlagModal, setShowFlagModal] = useState(false)
+  const [showDemoCall, setShowDemoCall] = useState(false)
 
   const task = getSelectedTask()
 
@@ -68,6 +70,16 @@ export function TaskDetailPanel() {
     .split(' ')
     .map(n => n[0])
     .join('')
+
+  // Show demo call panel
+  if (showDemoCall) {
+    return (
+      <OutboundCallPanel
+        task={task}
+        onClose={() => setShowDemoCall(false)}
+      />
+    )
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
@@ -159,11 +171,15 @@ export function TaskDetailPanel() {
                 Flag Patient
               </Button>
             )}
-            {task.status !== 'completed' && (
-              <Button variant="outline" size="default">
-                Schedule Call
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="default"
+              className="text-green-600 border-green-300 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-950 gap-2"
+              onClick={() => setShowDemoCall(true)}
+            >
+              <Phone className="h-4 w-4" />
+              Demo Call
+            </Button>
           </div>
 
           <div className="flex items-center gap-3">

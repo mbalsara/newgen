@@ -149,6 +149,12 @@ export interface CompletedEvent extends BaseTimelineEvent {
   description: string
 }
 
+// Note event
+export interface NoteEvent extends BaseTimelineEvent {
+  type: 'note'
+  content: string
+}
+
 // Union type for all timeline events
 export type TimelineEvent =
   | CreatedEvent
@@ -160,6 +166,7 @@ export type TimelineEvent =
   | BalanceEvent
   | NextStepsEvent
   | CompletedEvent
+  | NoteEvent
 
 // Main Task interface
 export interface Task {

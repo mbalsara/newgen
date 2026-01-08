@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useLocation, Link } from 'react-router-dom'
-import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown, Plus, Mic, AlertTriangle, ArrowRight, X, Pencil } from 'lucide-react'
+import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown, Plus, Mic, AlertTriangle, ArrowRight, X, Pencil, Phone, StickyNote } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTasks } from '@/contexts/tasks-context'
 import { getAgent, aiAgents, staffMembers } from '@/lib/mock-agents'
 import { cn } from '@/lib/utils'
-import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters, TaskStatus } from '@/lib/task-types'
+import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters, TaskStatus, PatientFlagReason } from '@/lib/task-types'
+import { OutboundCallPanel } from '@/components/tasks/outbound-call-panel'
+import { PatientFlagModal } from '@/components/patients/patient-flag-modal'
 
 // Status colors
 const statusColors: Record<string, string> = {
@@ -46,7 +48,9 @@ export default function TasksPage() {
     refreshing,
     isPatientFlagged,
     getPatientFlag,
+    flagPatient,
     assignTask,
+    addNoteToTask,
     markTaskDone,
     reopenTask,
     toggleNextStep,
@@ -67,6 +71,15 @@ export default function TasksPage() {
   }, [location.state, selectTask])
 
   const filteredTasks = getFilteredTasks()
+
+  // Auto-select first task when page loads or when filtered tasks change and no task is selected
+  useEffect(() => {
+    const hasSelectedTaskInFiltered = filteredTasks.some(t => t.id === selectedTaskId)
+    if (!hasSelectedTaskInFiltered && filteredTasks.length > 0) {
+      selectTask(filteredTasks[0].id)
+    }
+  }, [filteredTasks, selectedTaskId, selectTask])
+
   // Look for selected task in all tasks first (for Queue navigation), then in filtered tasks
   const selectedTask = tasks.find(t => t.id === selectedTaskId) || filteredTasks.find(t => t.id === selectedTaskId) || filteredTasks[0]
 
@@ -178,8 +191,22 @@ export default function TasksPage() {
             isFlagged={isPatientFlagged(selectedTask.patient.id)}
             flag={getPatientFlag(selectedTask.patient.id)}
             onAssign={(agentId) => assignTask(selectedTask.id, agentId)}
-            onMarkDone={() => markTaskDone(selectedTask.id)}
+            onMarkDone={() => {
+              // Find the next task in the filtered list before marking done
+              const currentIndex = filteredTasks.findIndex(t => t.id === selectedTask.id)
+              const nextTask = filteredTasks[currentIndex + 1] || filteredTasks[currentIndex - 1]
+              markTaskDone(selectedTask.id)
+              // Select next task if available
+              if (nextTask && nextTask.id !== selectedTask.id) {
+                selectTask(nextTask.id)
+              }
+            }}
             onReopen={() => reopenTask(selectedTask.id)}
+            onFlagPatient={(reason, notes) => {
+              const agent = getAgent(selectedTask.assignedAgent)
+              flagPatient(selectedTask.patient.id, reason, notes, agent?.name || 'Staff')
+            }}
+            onAddNote={(note) => addNoteToTask(selectedTask.id, note)}
             onToggleNextStep={(eventId, index) => toggleNextStep(selectedTask.id, eventId, index)}
             expandedTranscripts={expandedTranscripts}
             onToggleTranscript={toggleTranscript}
@@ -252,21 +279,37 @@ function TaskCard({ task, isSelected, isFlagged, onClick }: {
 }
 
 // Task Detail Component
-function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onToggleNextStep, expandedTranscripts, onToggleTranscript, showAssignDropdown, setShowAssignDropdown }: {
+function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onFlagPatient, onAddNote, onToggleNextStep, expandedTranscripts, onToggleTranscript, showAssignDropdown, setShowAssignDropdown }: {
   task: Task
   isFlagged: boolean
   flag: any
   onAssign: (agentId: string) => void
   onMarkDone: () => void
   onReopen: () => void
+  onFlagPatient: (reason: PatientFlagReason, notes: string) => void
+  onAddNote: (note: string) => void
   onToggleNextStep: (eventId: string, index: number) => void
   expandedTranscripts: Record<string, boolean>
   onToggleTranscript: (eventId: string) => void
   showAssignDropdown: boolean
   setShowAssignDropdown: (show: boolean) => void
 }) {
+  const [showDemoCall, setShowDemoCall] = useState(false)
+  const [showFlagModal, setShowFlagModal] = useState(false)
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false)
+  const [noteText, setNoteText] = useState('')
   const agent = getAgent(task.assignedAgent)
   const initials = task.patient.name.split(' ').map(n => n[0]).join('')
+
+  // Show demo call panel
+  if (showDemoCall) {
+    return (
+      <OutboundCallPanel
+        task={task}
+        onClose={() => setShowDemoCall(false)}
+      />
+    )
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -370,18 +413,29 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onT
       {/* Action Bar */}
       <div className="bg-white border-t border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button
+            onClick={() => setShowAddNoteModal(true)}
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+          >
+            <StickyNote className="w-4 h-4" />
             Add Note
           </button>
           {!isFlagged && (
-            <button className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-1.5">
+            <button
+              onClick={() => setShowFlagModal(true)}
+              className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-1.5"
+            >
               <Flag className="w-4 h-4" />
               Flag Patient
             </button>
           )}
-          {task.status !== 'completed' && (
-            <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-              Schedule Call
+          {agent?.type === 'ai' && (
+            <button
+              onClick={() => setShowDemoCall(true)}
+              className="px-3 py-1.5 border border-green-300 rounded-lg text-sm font-medium text-green-600 hover:bg-green-50 flex items-center gap-1.5"
+            >
+              <Phone className="w-4 h-4" />
+              Demo Call
             </button>
           )}
         </div>
@@ -415,6 +469,57 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onT
           )}
         </div>
       </div>
+
+      {/* Flag Patient Modal */}
+      <PatientFlagModal
+        open={showFlagModal}
+        onOpenChange={setShowFlagModal}
+        patientName={task.patient.name}
+        onFlag={onFlagPatient}
+      />
+
+      {/* Add Note Modal */}
+      {showAddNoteModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowAddNoteModal(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">Add Note</h3>
+            <p className="text-sm text-gray-500 mb-4">Add a note to the task timeline for {task.patient.name}</p>
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Enter your note..."
+              className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={4}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => {
+                  setShowAddNoteModal(false)
+                  setNoteText('')
+                }}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (noteText.trim()) {
+                    onAddNote(noteText.trim())
+                    setShowAddNoteModal(false)
+                    setNoteText('')
+                  }
+                }}
+                disabled={!noteText.trim()}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add Note
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -726,6 +831,7 @@ function TimelineEventItem({ event, isExpanded, onToggleTranscript, onToggleNext
     objectives: { icon: Plus, bg: 'bg-violet-100', text: 'text-violet-600' },
     balance: { icon: Plus, bg: 'bg-red-100', text: 'text-red-600' },
     flag: { icon: Flag, bg: 'bg-red-500', text: 'text-white' },
+    note: { icon: StickyNote, bg: 'bg-blue-100', text: 'text-blue-600' },
   }
 
   const config = iconConfig[event.type] || iconConfig.created
@@ -788,6 +894,16 @@ function TimelineEventItem({ event, isExpanded, onToggleTranscript, onToggleNext
             <span className="text-xs text-gray-400">{event.timestamp}</span>
           </div>
           <p className="text-sm text-gray-600 mt-0.5">{(event as any).description}</p>
+        </div>
+      )}
+
+      {event.type === 'note' && (
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-blue-800">{event.title}</span>
+            <span className="text-xs text-blue-600">{event.timestamp}</span>
+          </div>
+          <p className="text-sm text-blue-900 mt-2">{(event as any).content}</p>
         </div>
       )}
     </div>
