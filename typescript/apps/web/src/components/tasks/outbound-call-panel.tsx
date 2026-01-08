@@ -31,6 +31,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const durationRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const canceledRef = useRef(false)
 
   // Get the agent info and Vapi assistant ID from task
   const agent = getAgent(task.assignedAgent)
@@ -160,9 +161,22 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     setCallState('dialing')
     setTranscript([])
     setDuration(0)
+    canceledRef.current = false
 
     try {
       const result = await startOutboundCall(vapiAssistantId, phoneNumber)
+
+      // Check if user canceled while we were waiting for API
+      if (canceledRef.current) {
+        console.log('Call was canceled during dialing, ending the call')
+        try {
+          await endOutboundCall(result.callId)
+        } catch {
+          // Ignore errors when ending canceled call
+        }
+        return
+      }
+
       setCallId(result.callId)
       setCallState('ringing')
 
@@ -179,6 +193,10 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       // Initial poll
       pollCallStatus(result.callId)
     } catch (err) {
+      // Don't show error if user canceled
+      if (canceledRef.current) {
+        return
+      }
       console.error('Failed to start call:', err)
       setError(err instanceof Error ? err.message : 'Failed to start call')
       setCallState('failed')
@@ -186,8 +204,22 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   }
 
   const endCall = async () => {
+    // Clear any timers first
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    if (durationRef.current) {
+      clearInterval(durationRef.current)
+      durationRef.current = null
+    }
+
+    // If no callId yet (still dialing), mark as canceled and reset to idle
     if (!callId) {
-      console.log('No call ID to end')
+      console.log('Canceling call (no call ID yet)')
+      canceledRef.current = true
+      setCallState('idle')
+      setDuration(0)
       return
     }
 
@@ -197,27 +229,11 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       await endOutboundCall(callId)
       console.log('Call ended successfully')
       setCallState('ended')
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-      if (durationRef.current) {
-        clearInterval(durationRef.current)
-        durationRef.current = null
-      }
     } catch (err) {
       console.error('Failed to end call:', err)
       // Still update the UI state even if the API call fails
       // The call may have already ended on the server
       setCallState('ended')
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-      if (durationRef.current) {
-        clearInterval(durationRef.current)
-        durationRef.current = null
-      }
     }
   }
 
@@ -317,9 +333,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
 
   // Active Call View
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+      <div className="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -354,7 +370,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       </div>
 
       {/* Transcript */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-6">
           <h3 className="text-sm font-medium text-muted-foreground mb-4">Live Transcript</h3>
 
@@ -404,7 +420,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-4">
+      <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-4">
         <div className="flex items-center justify-center gap-4">
           {callState !== 'ended' ? (
             <Button
