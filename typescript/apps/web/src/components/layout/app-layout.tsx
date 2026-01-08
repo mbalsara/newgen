@@ -11,8 +11,8 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className={isFullHeightPage ? 'overflow-hidden' : ''}>
-        <div className={isFullHeightPage ? 'h-full' : 'flex-1 overflow-auto'}>
+      <SidebarInset className={isFullHeightPage ? 'overflow-hidden min-h-0' : ''}>
+        <div className={isFullHeightPage ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'flex-1 overflow-auto'}>
           <Outlet />
         </div>
       </SidebarInset>

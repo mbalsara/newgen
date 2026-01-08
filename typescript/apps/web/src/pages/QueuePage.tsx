@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AlertTriangle, Check, Filter, RefreshCw, X, ExternalLink, Flag, Play, ChevronDown, Plus, Mic, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -280,7 +281,17 @@ function TaskDetailPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Header */}
+      {/* Flag Warning Banner - Fixed at top */}
+      {isFlagged && flag && (
+        <div className="bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-center gap-2 shrink-0">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+          <span className="text-sm text-red-700 flex-1">
+            <span className="font-medium">Abusive Language</span> - {flag.notes}
+          </span>
+        </div>
+      )}
+
+      {/* Header - Fixed */}
       <div className="bg-white border-b border-gray-200 px-5 py-4 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -293,9 +304,12 @@ function TaskDetailPanel({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold text-gray-900">{task.patient.name}</h2>
-                <button className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 hover:underline">
+                <Link
+                  to={`/patient/${task.patient.id}`}
+                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 hover:underline"
+                >
                   Open Chart <ExternalLink className="w-3 h-3" />
-                </button>
+                </Link>
               </div>
               <p className="text-xs text-gray-500">
                 {task.patient.phone} • DOB: {task.patient.dob} • {task.patient.id}
@@ -307,16 +321,6 @@ function TaskDetailPanel({
           </span>
         </div>
       </div>
-
-      {/* Flag Warning Banner */}
-      {isFlagged && flag && (
-        <div className="bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-center gap-2 shrink-0">
-          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-          <span className="text-sm text-red-700 flex-1">
-            <span className="font-medium">Abusive Language</span> - {flag.notes}
-          </span>
-        </div>
-      )}
 
       {/* Content */}
       <ScrollArea className="flex-1 min-h-0">
