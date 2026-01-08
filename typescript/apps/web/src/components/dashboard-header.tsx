@@ -7,9 +7,9 @@ export function DashboardHeader() {
         <ModeToggle />
       </div>
       <div className="text-center space-y-4">
-        <h1 className="text-5xl font-bold text-balance text-primary">MedOffice Pro</h1>
+        <h1 className="text-5xl font-bold text-balance text-primary">VagusX</h1>
         <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-          Streamline your patient authorization, eligibility management and more with AI Agents
+          AI Voice Task Management for Physician Offices
         </p>
       </div>
     </div>

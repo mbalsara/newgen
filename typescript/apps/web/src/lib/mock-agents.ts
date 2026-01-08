@@ -1,0 +1,79 @@
+import type { VoiceAgent, FlagReasonOption, StatusOption } from './task-types'
+
+// AI Agents
+export const aiAgents: VoiceAgent[] = [
+  { id: 'ai-luna', name: 'Luna', type: 'ai', role: 'Appointments & Confirmations', avatar: '🤖' },
+  { id: 'ai-max', name: 'Max', type: 'ai', role: 'Follow-ups & Recalls', avatar: '🤖' },
+  { id: 'ai-nova', name: 'Nova', type: 'ai', role: 'Collections & Billing', avatar: '🤖' },
+]
+
+// Staff Members
+export const staffMembers: VoiceAgent[] = [
+  { id: 'sarah', name: 'Sarah M.', type: 'staff', role: 'Front Office', avatar: 'SM' },
+  { id: 'john', name: 'John D.', type: 'staff', role: 'Back Office', avatar: 'JD' },
+  { id: 'maria', name: 'Maria G.', type: 'staff', role: 'Billing', avatar: 'MG' },
+  { id: 'tom', name: 'Tom R.', type: 'staff', role: 'Front Office', avatar: 'TR' },
+  { id: 'lisa', name: 'Lisa K.', type: 'staff', role: 'Scheduling', avatar: 'LK' },
+  { id: 'mike', name: 'Mike P.', type: 'staff', role: 'Back Office', avatar: 'MP' },
+]
+
+// All agents combined
+export const allAgents: VoiceAgent[] = [...aiAgents, ...staffMembers]
+
+// Get agent by ID
+export function getAgent(id: string): VoiceAgent | undefined {
+  return allAgents.find(a => a.id === id)
+}
+
+// Filter agents by search query
+export function getFilteredAgents(query: string): { ai: VoiceAgent[]; staff: VoiceAgent[] } {
+  const q = query.toLowerCase().trim()
+  if (!q) return { ai: aiAgents, staff: staffMembers }
+  return {
+    ai: aiAgents.filter(a => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)),
+    staff: staffMembers.filter(a => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)),
+  }
+}
+
+// Flag reason options
+export const flagReasons: FlagReasonOption[] = [
+  { id: 'abusive-language', label: 'Abusive Language', description: 'Used profanity or offensive language' },
+  { id: 'verbal-threats', label: 'Verbal Threats', description: 'Made threatening statements' },
+  { id: 'harassment', label: 'Harassment', description: 'Harassing or intimidating behavior' },
+  { id: 'discriminatory', label: 'Discriminatory Remarks', description: 'Made discriminatory or hateful comments' },
+  { id: 'other', label: 'Other Concern', description: 'Other behavioral concern' },
+]
+
+// Status options for filters
+export const statusOptions: StatusOption[] = [
+  { id: 'all', label: 'All Status', color: 'bg-gray-100 text-gray-600' },
+  { id: 'in-progress', label: 'Active', color: 'bg-amber-100 text-amber-700' },
+  { id: 'scheduled', label: 'Scheduled', color: 'bg-blue-100 text-blue-700' },
+  { id: 'escalated', label: 'Escalated', color: 'bg-red-100 text-red-700' },
+  { id: 'pending', label: 'Pending', color: 'bg-gray-100 text-gray-600' },
+  { id: 'completed', label: 'Completed', color: 'bg-green-100 text-green-700' },
+]
+
+// Get status color classes
+export function getStatusColor(status: string): { dot: string; badge: string } {
+  switch (status) {
+    case 'in-progress':
+      return { dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700' }
+    case 'scheduled':
+      return { dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-700' }
+    case 'escalated':
+      return { dot: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
+    case 'pending':
+      return { dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-600' }
+    case 'completed':
+      return { dot: 'bg-green-500', badge: 'bg-green-100 text-green-700' }
+    default:
+      return { dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-600' }
+  }
+}
+
+// Get status label
+export function getStatusLabel(status: string): string {
+  const option = statusOptions.find(s => s.id === status)
+  return option?.label || status
+}
