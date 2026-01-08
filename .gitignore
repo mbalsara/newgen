@@ -1,0 +1,40 @@
+node_modules
+node_modules/,pnpm
+.vscode/*
+.nx/*
+dist
+build
+
+apps/*/dist
+apps/*/build
+
+packages/*/dist
+packages/*/build
+packages/*/.plasmo
+
+.parcel-cache
+
+# Ignore .tsbuildinfo files in any subdirectory
+**/*.tsbuildinfo
+
+typescript/frontend/.env
+
+
+# python
+
+/python/*/.venv
+**/*.idea
+/python/*/requirements.txt
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# java
+.idea/*
+
+.scannerwork/*
+
+*.todo
+
+.DS_Store
