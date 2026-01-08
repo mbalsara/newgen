@@ -1,6 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
 import {
-  Home,
   Calendar,
   Users,
   ListTodo,
@@ -24,11 +23,10 @@ import {
 import { ModeToggle } from '@/components/mode-toggle'
 
 const navItems = [
-  { icon: Home, label: 'Home', href: '/' },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
+  { icon: ListTodo, label: 'Tasks', href: '/tasks' },
   { icon: Calendar, label: 'Appointments', href: '/appointments' },
   { icon: Users, label: 'Patients', href: '/patients' },
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/queues' },
-  { icon: ListTodo, label: 'Tasks', href: '/tasks' },
   { icon: BarChart3, label: 'Reports', href: '/reports' },
   { icon: Settings, label: 'Settings', href: '/settings' },
 ]

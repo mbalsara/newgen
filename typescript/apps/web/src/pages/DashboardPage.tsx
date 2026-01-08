@@ -1,31 +1,31 @@
-import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle, Clock, User, Bot, ArrowRight } from 'lucide-react'
+import * as React from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertTriangle, CheckCircle, Clock, User, ArrowRight, Users, AlertCircle, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useTasks } from '@/contexts/tasks-context'
 import { useCurrentUser } from '@/contexts/user-context'
 import { getAgent } from '@/lib/mock-agents'
+import { todaysAppointments } from '@/lib/mock-data'
+import { OpenSlotsWidget } from '@/components/open-slots-widget'
 import type { Task } from '@/lib/task-types'
 import { cn } from '@/lib/utils'
 
-export default function QueuePage() {
+type TabType = 'my-tasks' | 'practice'
+
+export default function DashboardPage() {
   const navigate = useNavigate()
   const { currentUser } = useCurrentUser()
   const { tasks, isPatientFlagged, setFilters } = useTasks()
+  const [activeTab, setActiveTab] = React.useState<TabType>('my-tasks')
 
   // Calculate stats
   const myTasks = tasks.filter(t => t.assignedAgent === currentUser.id)
   const needsAttention = tasks.filter(t => t.status === 'escalated' || t.status === 'pending')
-  const aiActiveTasks = tasks.filter(t => {
-    const agent = getAgent(t.assignedAgent)
-    return agent?.type === 'ai' && t.status !== 'completed'
-  })
   const completedToday = tasks.filter(t => t.status === 'completed')
 
-  // My escalated tasks
+  // My escalated tasks (for tab badge)
   const myEscalatedTasks = tasks.filter(t => t.assignedAgent === currentUser.id && t.status === 'escalated')
-
-  // Flagged patients in my tasks
-  const myFlaggedTasks = myTasks.filter(t => isPatientFlagged(t.patient.id))
 
   // Group tasks for kanban (excluding completed)
   const scheduled = tasks.filter(t => t.status === 'scheduled').slice(0, 4)
@@ -56,6 +56,11 @@ export default function QueuePage() {
     navigate('/tasks')
   }
 
+  // Calculate practice stats
+  const insuranceIssues = todaysAppointments.filter(
+    a => a.patient.insurance?.status === 'invalid' || a.patient.insurance?.status === 'pending'
+  ).length
+
   return (
     <div className="h-full overflow-auto bg-gray-50">
       {/* Header */}
@@ -71,97 +76,145 @@ export default function QueuePage() {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mt-4">
+          <button
+            onClick={() => setActiveTab('my-tasks')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              activeTab === 'my-tasks'
+                ? 'bg-gray-900 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            )}
+          >
+            <User className="w-4 h-4" />
+            My Tasks
+            {myEscalatedTasks.length > 0 && (
+              <span className={cn(
+                'ml-1 px-1.5 py-0.5 text-xs rounded-full',
+                activeTab === 'my-tasks' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
+              )}>
+                {myEscalatedTasks.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('practice')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              activeTab === 'practice'
+                ? 'bg-gray-900 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            )}
+          >
+            <Building2 className="w-4 h-4" />
+            Practice
+            {insuranceIssues > 0 && (
+              <span className={cn(
+                'ml-1 px-1.5 py-0.5 text-xs rounded-full',
+                activeTab === 'practice' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+              )}>
+                {insuranceIssues}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            title="My Tasks"
-            value={myTasks.length}
-            icon={User}
-            color="violet"
-            onClick={handleMyTasksClick}
-          />
-          <StatsCard
-            title="Needs Attention"
-            value={needsAttention.length}
-            icon={AlertTriangle}
-            color="red"
-            onClick={() => handleViewAll('needs-attention')}
-          />
-          <StatsCard
-            title="AI Active"
-            value={aiActiveTasks.length}
-            icon={Bot}
-            color="gray"
-          />
-          <StatsCard
-            title="Completed Today"
-            value={completedToday.length}
-            icon={CheckCircle}
-            color="green"
-          />
-        </div>
+        {activeTab === 'my-tasks' && (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <StatsCard
+                title="My Tasks"
+                value={myTasks.length}
+                icon={User}
+                color="violet"
+                onClick={handleMyTasksClick}
+              />
+              <StatsCard
+                title="Needs Attention"
+                value={needsAttention.length}
+                icon={AlertTriangle}
+                color="red"
+                onClick={() => handleViewAll('needs-attention')}
+              />
+              <StatsCard
+                title="Completed Today"
+                value={completedToday.length}
+                icon={CheckCircle}
+                color="green"
+              />
+            </div>
 
-        {/* Alerts Section */}
-        {(myEscalatedTasks.length > 0 || myFlaggedTasks.length > 0) && (
-          <div className="flex flex-wrap gap-3">
-            {myEscalatedTasks.length > 0 && (
-              <button
-                onClick={handleMyTasksClick}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
-              >
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-sm text-amber-800">
-                  <span className="font-medium">{myEscalatedTasks.length} task{myEscalatedTasks.length > 1 ? 's' : ''}</span> escalated to you
-                </span>
-              </button>
-            )}
-            {myFlaggedTasks.length > 0 && (
-              <button
-                onClick={handleMyTasksClick}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-              >
-                <AlertTriangle className="w-4 h-4 text-red-600" />
-                <span className="text-sm text-red-800">
-                  <span className="font-medium">{myFlaggedTasks.length} flagged patient{myFlaggedTasks.length > 1 ? 's' : ''}</span> in your queue
-                </span>
-              </button>
-            )}
-          </div>
+            {/* Compact Kanban */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <CompactColumn
+                title="Scheduled"
+                tasks={scheduled}
+                totalCount={scheduledTotal}
+                color="blue"
+                isPatientFlagged={isPatientFlagged}
+                onTaskClick={handleTaskClick}
+                onViewAll={() => handleViewAll('scheduled')}
+              />
+              <CompactColumn
+                title="In Progress"
+                tasks={inProgress}
+                totalCount={inProgressTotal}
+                color="amber"
+                isPatientFlagged={isPatientFlagged}
+                onTaskClick={handleTaskClick}
+                onViewAll={() => handleViewAll('in-progress')}
+              />
+              <CompactColumn
+                title="Needs Attention"
+                tasks={needsAttentionTasks}
+                totalCount={needsAttentionTotal}
+                color="red"
+                isPatientFlagged={isPatientFlagged}
+                onTaskClick={handleTaskClick}
+                onViewAll={() => handleViewAll('needs-attention')}
+              />
+            </div>
+          </>
         )}
 
-        {/* Compact Kanban */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <CompactColumn
-            title="Scheduled"
-            tasks={scheduled}
-            totalCount={scheduledTotal}
-            color="blue"
-            isPatientFlagged={isPatientFlagged}
-            onTaskClick={handleTaskClick}
-            onViewAll={() => handleViewAll('scheduled')}
-          />
-          <CompactColumn
-            title="In Progress"
-            tasks={inProgress}
-            totalCount={inProgressTotal}
-            color="amber"
-            isPatientFlagged={isPatientFlagged}
-            onTaskClick={handleTaskClick}
-            onViewAll={() => handleViewAll('in-progress')}
-          />
-          <CompactColumn
-            title="Needs Attention"
-            tasks={needsAttentionTasks}
-            totalCount={needsAttentionTotal}
-            color="red"
-            isPatientFlagged={isPatientFlagged}
-            onTaskClick={handleTaskClick}
-            onViewAll={() => handleViewAll('needs-attention')}
-          />
-        </div>
+        {activeTab === 'practice' && (
+          <>
+            {/* Practice Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <PracticeStatCard
+                title="Today's Patients"
+                value={todaysAppointments.length}
+                icon={Users}
+                description="Scheduled appointments"
+                onClick={() => navigate('/appointments')}
+              />
+              <PracticeStatCard
+                title="Insurance Issues"
+                value={insuranceIssues}
+                icon={AlertCircle}
+                description="Require verification"
+                color="amber"
+                onClick={() => navigate('/appointments')}
+              />
+              <OpenSlotsWidget />
+            </div>
+
+            {/* Quick Links */}
+            <div className="flex gap-3">
+              <Button variant="outline" asChild>
+                <Link to="/appointments">View Today's Schedule</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/reports">View Reports</Link>
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -228,6 +281,54 @@ function StatsCard({
         </div>
       )}
     </Component>
+  )
+}
+
+// Practice Stat Card Component
+function PracticeStatCard({
+  title,
+  value,
+  icon: Icon,
+  description,
+  color = 'blue',
+  onClick,
+}: {
+  title: string
+  value: number
+  icon: React.ElementType
+  description: string
+  color?: 'blue' | 'amber'
+  onClick?: () => void
+}) {
+  const colorClasses = {
+    blue: {
+      bg: 'bg-blue-50',
+      icon: 'text-blue-600',
+      value: 'text-blue-700',
+    },
+    amber: {
+      bg: 'bg-amber-50',
+      icon: 'text-amber-600',
+      value: 'text-amber-700',
+    },
+  }
+
+  const colors = colorClasses[color]
+
+  return (
+    <button
+      onClick={onClick}
+      className="bg-white border border-gray-200 rounded-xl p-5 text-left hover:shadow-md hover:border-gray-300 transition-all cursor-pointer"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-gray-500">{title}</span>
+        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', colors.bg)}>
+          <Icon className={cn('w-4 h-4', colors.icon)} />
+        </div>
+      </div>
+      <div className={cn('text-3xl font-bold', colors.value)}>{value}</div>
+      <div className="mt-1 text-xs text-gray-400">{description}</div>
+    </button>
   )
 }
 

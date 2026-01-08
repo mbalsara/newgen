@@ -6,12 +6,11 @@ import { TasksProvider } from '@/contexts/tasks-context'
 import { AppLayout } from '@/components/layout/app-layout'
 
 // Pages
-import HomePage from '@/pages/HomePage'
 import AppointmentsPage from '@/pages/AppointmentsPage'
 import PatientsPage from '@/pages/PatientsPage'
 import PatientDetailPage from '@/pages/PatientDetailPage'
 import TasksPage from '@/pages/TasksPage'
-import QueuePage from '@/pages/QueuePage'
+import DashboardPage from '@/pages/DashboardPage'
 import ReportsPage from '@/pages/ReportsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -31,12 +30,11 @@ function App() {
 
             {/* Main app routes (with sidebar) */}
             <Route element={<AppLayout />}>
-              <Route path="/" element={<HomePage />} />
+              <Route path="/" element={<DashboardPage />} />
               <Route path="/appointments" element={<AppointmentsPage />} />
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patient/:id" element={<PatientDetailPage />} />
               <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/queues" element={<QueuePage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
@@ -45,6 +43,8 @@ function App() {
             <Route path="/today" element={<Navigate to="/appointments" replace />} />
             <Route path="/upcoming" element={<Navigate to="/appointments" replace />} />
             <Route path="/agents" element={<Navigate to="/settings" replace />} />
+            <Route path="/queues" element={<Navigate to="/" replace />} />
+            <Route path="/home" element={<Navigate to="/" replace />} />
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
