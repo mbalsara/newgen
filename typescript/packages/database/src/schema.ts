@@ -11,3 +11,6 @@ export const users = pgTable('users', {
 
 // Export all auth schema tables
 export * from './auth-schema'
+
+// Export all application schemas
+export * from './schema/index'

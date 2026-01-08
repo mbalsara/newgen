@@ -11,7 +11,7 @@ import { PatientFlagsIndicator } from "./patient-flags-indicator"
 import { PatientInfoPopover } from "./patient-info-popover"
 import { PatientTypeBadge } from "./patient-type-badge"
 import { ViewControls } from "./view-controls"
-import { Link } from "react-router-dom"
+import { Link } from "react-router"
 import { isCurrentAppointment, isPastAppointment, formatTime, formatCurrency } from "@/lib/appointment-utils"
 
 interface TodaysPatientsTableProps {

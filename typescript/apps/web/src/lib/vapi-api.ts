@@ -562,12 +562,83 @@ export async function startOutboundCall(
 }
 
 /**
+ * Call ended reasons from Vapi
+ */
+export type CallEndedReason =
+  | 'assistant-error'
+  | 'assistant-not-found'
+  | 'db-error'
+  | 'no-server-available'
+  | 'pipeline-error-extra-function-failed'
+  | 'pipeline-error-first-message-failed'
+  | 'pipeline-error-function-filler-audio-failed'
+  | 'pipeline-error-function-failed'
+  | 'pipeline-error-openai-llm-failed'
+  | 'pipeline-error-azure-openai-llm-failed'
+  | 'pipeline-error-together-ai-llm-failed'
+  | 'pipeline-error-anyscale-llm-failed'
+  | 'pipeline-error-openrouter-llm-failed'
+  | 'pipeline-error-perplexity-ai-llm-failed'
+  | 'pipeline-error-deepinfra-llm-failed'
+  | 'pipeline-error-runpod-llm-failed'
+  | 'pipeline-error-groq-llm-failed'
+  | 'pipeline-error-anthropic-llm-failed'
+  | 'pipeline-error-google-llm-failed'
+  | 'pipeline-error-11labs-voice-failed'
+  | 'pipeline-error-playht-voice-failed'
+  | 'pipeline-error-lmnt-voice-failed'
+  | 'pipeline-error-azure-voice-failed'
+  | 'pipeline-error-rime-ai-voice-failed'
+  | 'pipeline-error-neets-voice-failed'
+  | 'pipeline-error-deepgram-transcriber-failed'
+  | 'pipeline-error-deepgram-voice-failed'
+  | 'pipeline-error-gladia-transcriber-failed'
+  | 'pipeline-error-assembly-ai-transcriber-failed'
+  | 'pipeline-error-openai-voice-failed'
+  | 'pipeline-error-cartesia-voice-failed'
+  | 'pipeline-error-custom-voice-failed'
+  | 'pipeline-error-tavus-video-failed'
+  | 'pipeline-no-available-model'
+  | 'server-shutdown'
+  | 'twilio-failed-to-connect-call'
+  | 'twilio-reported-customer-misdialed'
+  | 'vonage-disconnected'
+  | 'vonage-failed-to-connect-call'
+  | 'phone-call-provider-bypass-enabled-but-no-call-received'
+  | 'vapi-error-phone-call-worker-setup-socket-error'
+  | 'vapi-error-phone-call-worker-worker-setup-socket-timeout'
+  | 'vapi-error-phone-call-worker-could-not-find-call'
+  | 'vapi-error-phone-call-worker-call-never-connected'
+  | 'vapi-error-web-call-worker-setup-failed'
+  | 'assistant-not-invalid'
+  | 'assistant-not-provided'
+  | 'call-start-error-neither-assistant-nor-server-set'
+  | 'assistant-request-returned-error'
+  | 'assistant-request-returned-invalid-assistant'
+  | 'assistant-request-returned-forwarding-phone-number'
+  | 'assistant-request-returned-unspeakable-first-message'
+  | 'assistant-ended-call'
+  | 'assistant-said-end-call-phrase'
+  | 'assistant-forwarded-call'
+  | 'assistant-join-timed-out'
+  | 'customer-busy'
+  | 'customer-ended-call'
+  | 'customer-did-not-answer'
+  | 'customer-did-not-give-microphone-permission'
+  | 'exceeded-max-duration'
+  | 'manually-canceled'
+  | 'phone-call-provider-closed-websocket'
+  | 'silence-timed-out'
+  | 'voicemail'
+  | 'unknown-error'
+
+/**
  * Outbound call status response
  */
 export interface OutboundCallStatus {
   id: string
   status: 'queued' | 'ringing' | 'in-progress' | 'forwarding' | 'ended'
-  endedReason?: string
+  endedReason?: CallEndedReason
   transcript?: string
   messages?: Array<{
     role: 'assistant' | 'user' | 'system' | 'bot' | 'tool_calls' | 'tool_call_result'
@@ -591,6 +662,42 @@ export interface OutboundCallStatus {
 }
 
 /**
+ * Get human-readable description of call ended reason
+ */
+export function getCallEndedReasonDescription(reason?: CallEndedReason): { title: string; description: string; canRetry: boolean } {
+  switch (reason) {
+    case 'customer-did-not-answer':
+      return { title: 'No Answer', description: 'The patient did not answer the call.', canRetry: true }
+    case 'customer-busy':
+      return { title: 'Line Busy', description: 'The patient\'s line was busy.', canRetry: true }
+    case 'voicemail':
+      return { title: 'Voicemail', description: 'The call went to voicemail.', canRetry: true }
+    case 'customer-ended-call':
+      return { title: 'Call Ended', description: 'The patient hung up the call.', canRetry: true }
+    case 'assistant-ended-call':
+      return { title: 'Call Completed', description: 'The agent completed the call successfully.', canRetry: false }
+    case 'assistant-said-end-call-phrase':
+      return { title: 'Call Completed', description: 'The conversation ended naturally.', canRetry: false }
+    case 'exceeded-max-duration':
+      return { title: 'Time Limit', description: 'The call exceeded the maximum duration.', canRetry: true }
+    case 'silence-timed-out':
+      return { title: 'Silence Timeout', description: 'The call ended due to extended silence.', canRetry: true }
+    case 'manually-canceled':
+      return { title: 'Canceled', description: 'The call was canceled.', canRetry: true }
+    case 'twilio-failed-to-connect-call':
+    case 'vonage-failed-to-connect-call':
+      return { title: 'Connection Failed', description: 'Failed to connect the call. Please try again.', canRetry: true }
+    case 'twilio-reported-customer-misdialed':
+      return { title: 'Invalid Number', description: 'The phone number appears to be invalid.', canRetry: false }
+    default:
+      if (reason?.startsWith('pipeline-error')) {
+        return { title: 'Technical Error', description: 'A technical error occurred during the call.', canRetry: true }
+      }
+      return { title: 'Call Ended', description: reason || 'The call has ended.', canRetry: true }
+  }
+}
+
+/**
  * Get call status and transcript for polling
  */
 export async function getOutboundCallStatus(callId: string): Promise<OutboundCallStatus> {
@@ -601,6 +708,6 @@ export async function getOutboundCallStatus(callId: string): Promise<OutboundCal
  * End an active call
  */
 export async function endOutboundCall(callId: string): Promise<void> {
-  // Use DELETE to end the call (Vapi API)
+  // DELETE /call/{id} hangs up and deletes the call in Vapi
   await vapiRequest(`/call/${callId}`, 'DELETE')
 }

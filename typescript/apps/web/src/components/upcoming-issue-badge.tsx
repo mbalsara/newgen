@@ -1,7 +1,7 @@
 import type { UpcomingIssue } from "@/lib/types"
 import { AlertCircle, AlertTriangle, XCircle, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Link } from "react-router-dom"
+import { Link } from "react-router"
 
 interface UpcomingIssueBadgeProps {
   issue: UpcomingIssue

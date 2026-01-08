@@ -155,6 +155,13 @@ export interface NoteEvent extends BaseTimelineEvent {
   content: string
 }
 
+// Call event (outbound demo call)
+export interface CallEvent extends BaseTimelineEvent {
+  type: 'call'
+  endedReason: string
+  transcript?: string
+}
+
 // Union type for all timeline events
 export type TimelineEvent =
   | CreatedEvent
@@ -167,6 +174,7 @@ export type TimelineEvent =
   | NextStepsEvent
   | CompletedEvent
   | NoteEvent
+  | CallEvent
 
 // Main Task interface
 export interface Task {

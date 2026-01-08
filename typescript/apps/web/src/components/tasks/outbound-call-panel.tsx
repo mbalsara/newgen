@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ArrowLeft, Phone, PhoneOff, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Phone, PhoneOff, Loader2, CheckCircle, XCircle, AlertTriangle, PhoneMissed, Voicemail, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import { startOutboundCall, getOutboundCallStatus, endOutboundCall } from '@/lib/vapi-api'
-import { getAgent, getVapiAssistantId } from '@/lib/mock-agents'
+import { api, type CallStatusResponse, type Agent } from '@/lib/api-client'
+import { useTasks } from '@/contexts/tasks-context'
 import type { Task } from '@/lib/task-types'
-import type { OutboundCallStatus } from '@/lib/vapi-api'
+
+// Default VAPI phone number ID (configured in VAPI dashboard)
+// This should be set in the environment or VAPI dashboard
+const VAPI_PHONE_NUMBER_ID = import.meta.env.VITE_VAPI_PHONE_NUMBER_ID || '8e1f0d5e-96e5-4f43-b4a3-3f2d8f3a9c1b'
 
 interface OutboundCallPanelProps {
   task: Task
@@ -22,20 +25,36 @@ interface TranscriptMessage {
 }
 
 export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
+  const { handleCallCompletion } = useTasks()
   const [phoneNumber, setPhoneNumber] = useState('')
   const [callState, setCallState] = useState<CallState>('idle')
   const [callId, setCallId] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [duration, setDuration] = useState(0)
+  const [endedReason, setEndedReason] = useState<string | undefined>(undefined)
+  const [reasonInfo, setReasonInfo] = useState<CallStatusResponse['reasonInfo'] | null>(null)
+  const [taskUpdateResult, setTaskUpdateResult] = useState<{ action: string; message: string } | null>(null)
+  const [agent, setAgent] = useState<Agent | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const durationRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canceledRef = useRef(false)
 
-  // Get the agent info and Vapi assistant ID from task
-  const agent = getAgent(task.assignedAgent)
-  const vapiAssistantId = getVapiAssistantId(task.assignedAgent)
+  // Load agent info on mount
+  useEffect(() => {
+    const loadAgent = async () => {
+      if (task.assignedAgent) {
+        try {
+          const agentData = await api.agents.getById(task.assignedAgent)
+          setAgent(agentData)
+        } catch (err) {
+          console.error('Error loading agent:', err)
+        }
+      }
+    }
+    loadAgent()
+  }, [task.assignedAgent])
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -50,74 +69,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     }
   }, [])
 
-  const parseMessages = useCallback((callStatus: OutboundCallStatus): TranscriptMessage[] => {
-    // Debug: log the full call status to see what we're getting
-    console.log('Call status update:', {
-      status: callStatus.status,
-      hasMessages: !!callStatus.messages,
-      messageCount: callStatus.messages?.length || 0,
-      hasTranscript: !!callStatus.transcript,
-      hasArtifact: !!callStatus.artifact,
-      artifactMessages: callStatus.artifact?.messages?.length || 0,
-      messages: callStatus.messages
-    })
-
-    // Helper to extract content from a message object
-    const getMessageContent = (m: { message?: string; content?: string; text?: string }): string => {
-      return m.message || m.content || m.text || ''
-    }
-
-    // Try to extract from messages array first
-    if (callStatus.messages && callStatus.messages.length > 0) {
-      const parsed = callStatus.messages
-        .filter(m => m.role === 'assistant' || m.role === 'user' || m.role === 'bot')
-        .map(m => ({
-          role: (m.role === 'bot' ? 'assistant' : m.role) as 'assistant' | 'user',
-          content: getMessageContent(m)
-        }))
-        .filter(m => m.content.trim() !== '')
-
-      if (parsed.length > 0) return parsed
-    }
-
-    // Try artifact.messages if available (Vapi sometimes puts transcript here)
-    if (callStatus.artifact?.messages && callStatus.artifact.messages.length > 0) {
-      const parsed = callStatus.artifact.messages
-        .filter(m => m.role === 'assistant' || m.role === 'user' || m.role === 'bot')
-        .map(m => ({
-          role: (m.role === 'bot' ? 'assistant' : m.role) as 'assistant' | 'user',
-          content: getMessageContent(m)
-        }))
-        .filter(m => m.content.trim() !== '')
-
-      if (parsed.length > 0) return parsed
-    }
-
-    // Fallback: parse the transcript string if available
-    const transcriptStr = callStatus.transcript || callStatus.artifact?.transcript
-    if (transcriptStr) {
-      const lines = transcriptStr.split('\n').filter(l => l.trim())
-      return lines.map(line => {
-        // Try to parse "AI: text" or "User: text" format
-        const aiMatch = line.match(/^(AI|Assistant|Bot):\s*(.+)/i)
-        const userMatch = line.match(/^(User|Human|Customer):\s*(.+)/i)
-
-        if (aiMatch) {
-          return { role: 'assistant' as const, content: aiMatch[2] }
-        } else if (userMatch) {
-          return { role: 'user' as const, content: userMatch[2] }
-        }
-        // Default to assistant if no prefix
-        return { role: 'assistant' as const, content: line }
-      }).filter(m => m.content.trim() !== '')
-    }
-
-    return []
-  }, [])
-
   const pollCallStatus = useCallback(async (id: string) => {
     try {
-      const status = await getOutboundCallStatus(id)
+      const status = await api.calls.getStatus(id)
 
       // Update call state based on status
       if (status.status === 'ringing') {
@@ -126,6 +80,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
         setCallState('in-progress')
       } else if (status.status === 'ended') {
         setCallState('ended')
+        setEndedReason(status.endedReason)
+        setReasonInfo(status.reasonInfo)
+
         if (pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
@@ -134,17 +91,24 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
           clearInterval(durationRef.current)
           durationRef.current = null
         }
+
+        // Handle call completion - backend will update task
+        const result = await handleCallCompletion(task.id, id)
+        setTaskUpdateResult(result)
       }
 
       // Update transcript
-      const messages = parseMessages(status)
-      if (messages.length > 0) {
-        setTranscript(messages)
+      if (status.messages && status.messages.length > 0) {
+        const parsed = status.messages.map(m => ({
+          role: m.speaker === 'ai' ? 'assistant' as const : 'user' as const,
+          content: m.text
+        }))
+        setTranscript(parsed)
       }
     } catch (err) {
       console.error('Error polling call status:', err)
     }
-  }, [parseMessages])
+  }, [handleCallCompletion, task.id])
 
   const startCall = async () => {
     if (!phoneNumber.trim()) {
@@ -152,8 +116,8 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       return
     }
 
-    if (!vapiAssistantId) {
-      setError('This agent does not have a Vapi assistant configured')
+    if (!agent?.vapiAssistantId) {
+      setError('This agent does not have a VAPI assistant configured')
       return
     }
 
@@ -161,16 +125,24 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     setCallState('dialing')
     setTranscript([])
     setDuration(0)
+    setEndedReason(undefined)
+    setReasonInfo(null)
     canceledRef.current = false
 
     try {
-      const result = await startOutboundCall(vapiAssistantId, phoneNumber)
+      const result = await api.calls.startOutbound({
+        taskId: task.id,
+        agentId: task.assignedAgent,
+        patientName: task.patient.name,
+        phoneNumberId: VAPI_PHONE_NUMBER_ID,
+        customerNumber: phoneNumber,
+      })
 
       // Check if user canceled while we were waiting for API
       if (canceledRef.current) {
         console.log('Call was canceled during dialing, ending the call')
         try {
-          await endOutboundCall(result.callId)
+          await api.calls.end(result.callId)
         } catch {
           // Ignore errors when ending canceled call
         }
@@ -226,14 +198,21 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     console.log('Ending call:', callId)
 
     try {
-      await endOutboundCall(callId)
+      await api.calls.end(callId)
       console.log('Call ended successfully')
       setCallState('ended')
+      setEndedReason('manually-canceled')
+      setReasonInfo({
+        title: 'Call Cancelled',
+        description: 'The call was manually cancelled.',
+        canRetry: true,
+        isSuccess: false,
+      })
     } catch (err) {
       console.error('Failed to end call:', err)
       // Still update the UI state even if the API call fails
-      // The call may have already ended on the server
       setCallState('ended')
+      setEndedReason('manually-canceled')
     }
   }
 
@@ -243,6 +222,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     setTranscript([])
     setError(null)
     setDuration(0)
+    setEndedReason(undefined)
+    setReasonInfo(null)
+    setTaskUpdateResult(null)
   }
 
   const formatTime = (seconds: number) => {
@@ -292,7 +274,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                   <div className="text-xs text-muted-foreground">{agent?.role || 'AI Agent'}</div>
                 </div>
               </div>
-              {!vapiAssistantId && (
+              {agent && !agent.vapiAssistantId && (
                 <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                   Note: This agent is not configured for outbound calls
                 </div>
@@ -320,7 +302,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
               onClick={startCall}
               className="w-full bg-green-600 hover:bg-green-700"
               size="lg"
-              disabled={!vapiAssistantId}
+              disabled={!agent?.vapiAssistantId}
             >
               <Phone className="h-5 w-5 mr-2" />
               Start Demo Call
@@ -332,6 +314,10 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   }
 
   // Active Call View
+  const isSuccess = endedReason === 'assistant-ended-call' || endedReason === 'assistant-said-end-call-phrase'
+  const isVoicemail = endedReason === 'voicemail'
+  const isNoAnswer = endedReason === 'customer-did-not-answer' || endedReason === 'customer-busy'
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
       {/* Header */}
@@ -346,10 +332,16 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                   <span className="text-sm text-red-600 font-medium">Live</span>
                 </span>
               )}
-              {callState === 'ended' && (
-                <span className="flex items-center gap-1.5 text-green-600">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm font-medium">Completed</span>
+              {callState === 'ended' && reasonInfo && (
+                <span className={cn(
+                  'flex items-center gap-1.5',
+                  isSuccess ? 'text-green-600' : isVoicemail ? 'text-amber-600' : isNoAnswer ? 'text-orange-600' : 'text-gray-600'
+                )}>
+                  {isSuccess ? <CheckCircle className="h-4 w-4" /> :
+                   isVoicemail ? <Voicemail className="h-4 w-4" /> :
+                   isNoAnswer ? <PhoneMissed className="h-4 w-4" /> :
+                   <AlertTriangle className="h-4 w-4" />}
+                  <span className="text-sm font-medium">{reasonInfo.title}</span>
                 </span>
               )}
             </div>
@@ -385,10 +377,38 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                     {callState === 'in-progress' && 'Waiting for conversation...'}
                   </p>
                 </>
-              ) : (
+              ) : reasonInfo && (
                 <>
-                  <XCircle className="h-8 w-8 text-muted-foreground mb-4" />
-                  <p className="text-sm text-muted-foreground">No transcript available</p>
+                  <div className={cn(
+                    'w-16 h-16 rounded-full flex items-center justify-center mb-4',
+                    reasonInfo.isSuccess || isVoicemail ? 'bg-green-100 dark:bg-green-900' :
+                    isNoAnswer ? 'bg-orange-100 dark:bg-orange-900' :
+                    'bg-gray-100 dark:bg-gray-800'
+                  )}>
+                    {reasonInfo.isSuccess || isVoicemail ? <CheckCircle className="h-8 w-8 text-green-600" /> :
+                     isNoAnswer ? <PhoneMissed className="h-8 w-8 text-orange-600" /> :
+                     <XCircle className="h-8 w-8 text-gray-400" />}
+                  </div>
+                  <h4 className="font-medium mb-1">{reasonInfo.title}</h4>
+                  <p className="text-sm text-muted-foreground max-w-xs">{reasonInfo.description}</p>
+
+                  {/* Task update result */}
+                  {taskUpdateResult && (
+                    <div className={cn(
+                      'mt-4 p-3 rounded-lg text-sm max-w-xs',
+                      taskUpdateResult.action === 'completed' ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' :
+                      taskUpdateResult.action === 'flagged' ? 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300' :
+                      'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                    )}>
+                      {taskUpdateResult.message}
+                    </div>
+                  )}
+
+                  {reasonInfo.canRetry && !taskUpdateResult && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      You can try calling again using the button below.
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -432,18 +452,35 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
               <PhoneOff className="h-5 w-5 mr-2" />
               End Call
             </Button>
-          ) : (
+          ) : reasonInfo && (
             <>
-              <Button
-                onClick={resetCall}
-                variant="outline"
-                size="lg"
-              >
-                <Phone className="h-5 w-5 mr-2" />
-                Call Again
-              </Button>
+              {reasonInfo.canRetry && (
+                endedReason === 'customer-did-not-answer' ||
+                endedReason === 'customer-busy' ||
+                endedReason === 'voicemail' ||
+                endedReason === 'silence-timed-out'
+              ) ? (
+                <Button
+                  onClick={resetCall}
+                  size="lg"
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Retry Call
+                </Button>
+              ) : (
+                <Button
+                  onClick={resetCall}
+                  variant="outline"
+                  size="lg"
+                >
+                  <Phone className="h-5 w-5 mr-2" />
+                  Call Again
+                </Button>
+              )}
               <Button
                 onClick={onClose}
+                variant={reasonInfo.canRetry ? 'outline' : 'default'}
                 size="lg"
               >
                 Back to Task
