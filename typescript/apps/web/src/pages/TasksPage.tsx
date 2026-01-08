@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useTasks } from '@/contexts/tasks-context'
 import { getAgent, aiAgents, staffMembers } from '@/lib/mock-agents'
 import { cn } from '@/lib/utils'
-import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent } from '@/lib/task-types'
+import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters } from '@/lib/task-types'
 
 // Status colors
 const statusColors: Record<string, string> = {
@@ -102,7 +102,7 @@ export default function TasksPage() {
                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 className={cn(
                   'p-1.5 hover:bg-gray-100 rounded-lg',
-                  (filters.status || filters.agentId) ? 'text-violet-600 bg-violet-50' : 'text-gray-500'
+                  (filters.status !== 'all' || filters.agent !== 'all') ? 'text-violet-600 bg-violet-50' : 'text-gray-500'
                 )}
               >
                 <Filter className="w-4 h-4" />
@@ -119,26 +119,26 @@ export default function TasksPage() {
         </div>
 
         {/* Active Filters */}
-        {(filters.status || filters.agentId) && (
+        {(filters.status !== 'all' || filters.agent !== 'all') && (
           <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-            {filters.status && (
+            {filters.status !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs">
                 {statusLabels[filters.status]}
-                <button onClick={() => setFilters({ status: undefined })} className="hover:text-violet-900">
+                <button onClick={() => setFilters({ status: 'all' })} className="hover:text-violet-900">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
-            {filters.agentId && (
+            {filters.agent !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs">
-                {getAgent(filters.agentId)?.name}
-                <button onClick={() => setFilters({ agentId: undefined })} className="hover:text-violet-900">
+                {getAgent(filters.agent)?.name}
+                <button onClick={() => setFilters({ agent: 'all' })} className="hover:text-violet-900">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
             <button
-              onClick={() => setFilters({ status: undefined, agentId: undefined })}
+              onClick={() => setFilters({ status: 'all', agent: 'all' })}
               className="text-xs text-gray-500 hover:text-gray-700"
             >
               Clear all
@@ -492,6 +492,170 @@ function AgentDropdown({ currentAgentId, onSelect, onClose }: {
             <div className="px-3 py-4 text-sm text-gray-400 text-center">No agents found</div>
           )}
         </div>
+      </div>
+    </>
+  )
+}
+
+// Filter Dropdown with Status and Agent submenus
+function FilterDropdown({ filters, setFilters, onClose }: {
+  filters: TaskFilters
+  setFilters: (filters: Partial<TaskFilters>) => void
+  onClose: () => void
+}) {
+  const [activeSubmenu, setActiveSubmenu] = useState<'status' | 'agent' | null>(null)
+  const [agentSearch, setAgentSearch] = useState('')
+
+  const filteredAiAgents = aiAgents.filter(a =>
+    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    a.role.toLowerCase().includes(agentSearch.toLowerCase())
+  )
+  const filteredStaff = staffMembers.filter(s =>
+    s.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    s.role.toLowerCase().includes(agentSearch.toLowerCase())
+  )
+
+  const statuses: { value: TaskFilters['status']; label: string }[] = [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'in-progress', label: 'In Progress' },
+    { value: 'scheduled', label: 'Scheduled' },
+    { value: 'escalated', label: 'Escalated' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'completed', label: 'Completed' },
+  ]
+
+  return (
+    <>
+      <div className="fixed inset-0" onClick={onClose} />
+      <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+        {activeSubmenu === null && (
+          <div className="py-1">
+            <button
+              onClick={() => setActiveSubmenu('status')}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <span>Status</span>
+              <ChevronDown className="w-4 h-4 -rotate-90" />
+            </button>
+            <button
+              onClick={() => setActiveSubmenu('agent')}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <span>Agent</span>
+              <ChevronDown className="w-4 h-4 -rotate-90" />
+            </button>
+          </div>
+        )}
+
+        {activeSubmenu === 'status' && (
+          <div className="py-1">
+            <button
+              onClick={() => setActiveSubmenu(null)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 border-b border-gray-100"
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" />
+              <span>Back</span>
+            </button>
+            {statuses.map(s => (
+              <button
+                key={s.value}
+                onClick={() => { setFilters({ status: s.value }); onClose(); }}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
+                  filters.status === s.value ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+                )}
+              >
+                <span>{s.label}</span>
+                {filters.status === s.value && <Check className="w-4 h-4" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {activeSubmenu === 'agent' && (
+          <div>
+            <button
+              onClick={() => setActiveSubmenu(null)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 border-b border-gray-100"
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" />
+              <span>Back</span>
+            </button>
+
+            {/* Search */}
+            <div className="p-2 border-b border-gray-100">
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search agents..."
+                  value={agentSearch}
+                  onChange={(e) => setAgentSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-300"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="max-h-48 overflow-y-auto py-1">
+              {/* All Agents option */}
+              <button
+                onClick={() => { setFilters({ agent: 'all' }); onClose(); }}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
+                  filters.agent === 'all' ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+                )}
+              >
+                <span>All Agents</span>
+                {filters.agent === 'all' && <Check className="w-4 h-4" />}
+              </button>
+
+              {filteredAiAgents.length > 0 && (
+                <>
+                  <div className="px-3 py-1 text-[10px] font-medium text-gray-400 uppercase tracking-wide">AI Agents</div>
+                  {filteredAiAgents.map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => { setFilters({ agent: a.id }); onClose(); }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50',
+                        filters.agent === a.id ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+                      )}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center text-[10px]">🤖</span>
+                      <span className="flex-1 text-left truncate">{a.name}</span>
+                      {filters.agent === a.id && <Check className="w-4 h-4 shrink-0" />}
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {filteredStaff.length > 0 && (
+                <>
+                  <div className="px-3 py-1 text-[10px] font-medium text-gray-400 uppercase tracking-wide border-t border-gray-100 mt-1">Staff</div>
+                  {filteredStaff.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => { setFilters({ agent: s.id }); onClose(); }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50',
+                        filters.agent === s.id ? 'text-amber-600 bg-amber-50' : 'text-gray-700'
+                      )}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center text-[9px] font-medium text-amber-700">{s.avatar}</span>
+                      <span className="flex-1 text-left truncate">{s.name}</span>
+                      {filters.agent === s.id && <Check className="w-4 h-4 shrink-0" />}
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {filteredAiAgents.length === 0 && filteredStaff.length === 0 && agentSearch && (
+                <div className="px-3 py-4 text-sm text-gray-400 text-center">No agents found</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
