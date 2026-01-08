@@ -1,5 +1,8 @@
 // Load environment variables BEFORE other imports
-import 'dotenv/config'
+// Load .env first, then .env.local (local overrides base)
+import { config } from 'dotenv'
+config({ path: '.env' })
+config({ path: '.env.local', override: true })
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
