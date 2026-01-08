@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
+import { UserProvider } from '@/contexts/user-context'
 import { TasksProvider } from '@/contexts/tasks-context'
 import { AppLayout } from '@/components/layout/app-layout'
 
@@ -21,8 +22,9 @@ import './index.css'
 function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="vagusx-theme" attribute="class">
-      <TasksProvider>
-        <BrowserRouter>
+      <UserProvider>
+        <TasksProvider>
+          <BrowserRouter>
           <Routes>
             {/* Auth routes (no sidebar) */}
             <Route path="/auth/login" element={<LoginPage />} />
@@ -47,8 +49,9 @@ function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
           <Toaster />
-        </BrowserRouter>
-      </TasksProvider>
+          </BrowserRouter>
+        </TasksProvider>
+      </UserProvider>
     </ThemeProvider>
   )
 }

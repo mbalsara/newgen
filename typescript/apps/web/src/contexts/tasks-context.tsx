@@ -8,6 +8,7 @@ import type {
 } from '@/lib/task-types'
 import { mockTasks, patientFlags as initialPatientFlags } from '@/lib/mock-tasks'
 import { getAgent } from '@/lib/mock-agents'
+import { useCurrentUser } from '@/contexts/user-context'
 
 interface TasksState {
   tasks: Task[]
@@ -84,13 +85,14 @@ interface TasksContextValue extends TasksState {
 const TasksContext = React.createContext<TasksContextValue | null>(null)
 
 const initialFilters: TaskFilters = {
-  status: 'all',
-  agent: 'all',
+  statuses: [],  // All statuses
+  agent: 'me',   // My assigned tasks
   type: 'all',
   search: '',
 }
 
 export function TasksProvider({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useCurrentUser()
   const [tasks, setTasks] = React.useState<Task[]>(mockTasks)
   const [selectedTaskId, setSelectedTaskId] = React.useState<number | null>(mockTasks[0]?.id ?? null)
   const [filters, setFiltersState] = React.useState<TaskFilters>(initialFilters)
@@ -132,8 +134,14 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const getFilteredTasks = React.useCallback(() => {
     return tasks.filter(task => {
-      if (filters.status !== 'all' && task.status !== filters.status) return false
-      if (filters.agent !== 'all' && task.assignedAgent !== filters.agent) return false
+      // If statuses array has items, filter by them; empty array means all
+      if (filters.statuses.length > 0 && !filters.statuses.includes(task.status)) return false
+      // Agent filter: 'me' = current user, 'all' = no filter, else specific agent
+      if (filters.agent === 'me') {
+        if (task.assignedAgent !== currentUser.id) return false
+      } else if (filters.agent !== 'all') {
+        if (task.assignedAgent !== filters.agent) return false
+      }
       if (filters.type !== 'all' && task.type !== filters.type) return false
       if (filters.search) {
         const search = filters.search.toLowerCase()
@@ -141,11 +149,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       }
       return true
     })
-  }, [tasks, filters])
+  }, [tasks, filters, currentUser.id])
 
   const getActiveFilterCount = React.useCallback(() => {
     let count = 0
-    if (filters.status !== 'all') count++
+    if (filters.statuses.length > 0) count++
     if (filters.agent !== 'all') count++
     if (filters.type !== 'all') count++
     return count

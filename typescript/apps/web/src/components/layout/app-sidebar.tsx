@@ -4,7 +4,7 @@ import {
   Calendar,
   Users,
   ListTodo,
-  Columns3,
+  LayoutDashboard,
   BarChart3,
   Settings,
   PanelLeft,
@@ -27,8 +27,8 @@ const navItems = [
   { icon: Home, label: 'Home', href: '/' },
   { icon: Calendar, label: 'Appointments', href: '/appointments' },
   { icon: Users, label: 'Patients', href: '/patients' },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/queues' },
   { icon: ListTodo, label: 'Tasks', href: '/tasks' },
-  { icon: Columns3, label: 'Queues', href: '/queues' },
   { icon: BarChart3, label: 'Reports', href: '/reports' },
   { icon: Settings, label: 'Settings', href: '/settings' },
 ]

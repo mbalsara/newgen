@@ -179,8 +179,8 @@ export interface Task {
 
 // Task filters
 export interface TaskFilters {
-  status: TaskStatus | 'all'
-  agent: string | 'all'
+  statuses: TaskStatus[]  // Empty array means all statuses
+  agent: string | 'all' | 'me'  // 'me' = current user's tasks
   type: TaskType | 'all'
   search: string
 }

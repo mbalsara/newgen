@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useTasks } from '@/contexts/tasks-context'
 import { getAgent, aiAgents, staffMembers } from '@/lib/mock-agents'
 import { cn } from '@/lib/utils'
-import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters } from '@/lib/task-types'
+import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters, TaskStatus } from '@/lib/task-types'
 
 // Status colors
 const statusColors: Record<string, string> = {
@@ -79,7 +79,7 @@ export default function TasksPage() {
       {/* Left Sidebar - Task List */}
       <aside className="w-80 bg-white border-r border-gray-200 flex flex-col shrink-0 min-h-0">
         {/* Search Header - matches right panel header height */}
-        <div className="px-3 py-[13px] border-b border-gray-200">
+        <div className="px-3 py-[14px] border-b border-gray-200">
           <div className="flex items-center gap-2">
             <div className="flex-1 relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -102,7 +102,7 @@ export default function TasksPage() {
                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 className={cn(
                   'p-1.5 hover:bg-gray-100 rounded-lg',
-                  (filters.status !== 'all' || filters.agent !== 'all') ? 'text-violet-600 bg-violet-50' : 'text-gray-500'
+                  (filters.statuses.length > 0 || filters.agent !== 'all') ? 'text-violet-600 bg-violet-50' : 'text-gray-500'
                 )}
               >
                 <Filter className="w-4 h-4" />
@@ -119,17 +119,25 @@ export default function TasksPage() {
         </div>
 
         {/* Active Filters */}
-        {(filters.status !== 'all' || filters.agent !== 'all') && (
+        {(filters.statuses.length > 0 || filters.agent !== 'all') && (
           <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-            {filters.status !== 'all' && (
+            {filters.statuses.map(status => (
+              <span key={status} className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs">
+                {statusLabels[status]}
+                <button onClick={() => setFilters({ statuses: filters.statuses.filter(s => s !== status) })} className="hover:text-violet-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {filters.agent === 'me' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs">
-                {statusLabels[filters.status]}
-                <button onClick={() => setFilters({ status: 'all' })} className="hover:text-violet-900">
+                My Tasks
+                <button onClick={() => setFilters({ agent: 'all' })} className="hover:text-violet-900">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
-            {filters.agent !== 'all' && (
+            {filters.agent !== 'all' && filters.agent !== 'me' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs">
                 {getAgent(filters.agent)?.name}
                 <button onClick={() => setFilters({ agent: 'all' })} className="hover:text-violet-900">
@@ -138,7 +146,7 @@ export default function TasksPage() {
               </span>
             )}
             <button
-              onClick={() => setFilters({ status: 'all', agent: 'all' })}
+              onClick={() => setFilters({ statuses: [], agent: 'all' })}
               className="text-xs text-gray-500 hover:text-gray-700"
             >
               Clear all
@@ -430,7 +438,7 @@ function AgentDropdown({ currentAgentId, onSelect, onClose }: {
 
   return (
     <>
-      <div className="fixed inset-0" onClick={onClose} />
+      <div className="fixed inset-0 z-40" onClick={onClose} />
       <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
         {/* Search Input */}
         <div className="p-2 border-b border-gray-100">
@@ -515,18 +523,32 @@ function FilterDropdown({ filters, setFilters, onClose }: {
     s.role.toLowerCase().includes(agentSearch.toLowerCase())
   )
 
-  const statuses: { value: TaskFilters['status']; label: string }[] = [
-    { value: 'all', label: 'All Statuses' },
+  // Available statuses (excluding Scheduled)
+  const statuses: { value: TaskStatus; label: string }[] = [
     { value: 'in-progress', label: 'In Progress' },
-    { value: 'scheduled', label: 'Scheduled' },
     { value: 'escalated', label: 'Escalated' },
     { value: 'pending', label: 'Pending' },
     { value: 'completed', label: 'Completed' },
   ]
 
+  const toggleStatus = (status: TaskStatus) => {
+    const currentStatuses = filters.statuses
+    if (currentStatuses.includes(status)) {
+      // Remove status
+      setFilters({ statuses: currentStatuses.filter(s => s !== status) })
+    } else {
+      // Add status
+      setFilters({ statuses: [...currentStatuses, status] })
+    }
+  }
+
+  const selectAllStatuses = () => {
+    setFilters({ statuses: [] })  // Empty means all
+  }
+
   return (
     <>
-      <div className="fixed inset-0" onClick={onClose} />
+      <div className="fixed inset-0 z-40" onClick={onClose} />
       <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
         {activeSubmenu === null && (
           <div className="py-1">
@@ -556,19 +578,33 @@ function FilterDropdown({ filters, setFilters, onClose }: {
               <ChevronDown className="w-4 h-4 rotate-90" />
               <span>Back</span>
             </button>
-            {statuses.map(s => (
-              <button
-                key={s.value}
-                onClick={() => { setFilters({ status: s.value }); onClose(); }}
-                className={cn(
-                  'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
-                  filters.status === s.value ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
-                )}
-              >
-                <span>{s.label}</span>
-                {filters.status === s.value && <Check className="w-4 h-4" />}
-              </button>
-            ))}
+            {/* All Statuses option */}
+            <button
+              onClick={selectAllStatuses}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
+                filters.statuses.length === 0 ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+              )}
+            >
+              <span>All Statuses</span>
+              {filters.statuses.length === 0 && <Check className="w-4 h-4" />}
+            </button>
+            {statuses.map(s => {
+              const isSelected = filters.statuses.includes(s.value)
+              return (
+                <button
+                  key={s.value}
+                  onClick={() => toggleStatus(s.value)}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
+                    isSelected ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+                  )}
+                >
+                  <span>{s.label}</span>
+                  {isSelected && <Check className="w-4 h-4" />}
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -598,6 +634,18 @@ function FilterDropdown({ filters, setFilters, onClose }: {
             </div>
 
             <div className="max-h-48 overflow-y-auto py-1">
+              {/* My Tasks option */}
+              <button
+                onClick={() => { setFilters({ agent: 'me' }); onClose(); }}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50',
+                  filters.agent === 'me' ? 'text-violet-600 bg-violet-50' : 'text-gray-700'
+                )}
+              >
+                <span>My Tasks</span>
+                {filters.agent === 'me' && <Check className="w-4 h-4" />}
+              </button>
+
               {/* All Agents option */}
               <button
                 onClick={() => { setFilters({ agent: 'all' }); onClose(); }}
