@@ -1,5 +1,5 @@
 import { taskRepository, type TaskFilters, type TaskWithPatient } from './repository'
-import type { Task, NewTask, TimelineEvent, TaskStatus } from '@repo/database'
+import type { Task, NewTask, TimelineEvent, TaskStatus, RetryAttempt } from '@repo/database'
 
 // Generate unique ID for timeline events
 function generateEventId(type: string): string {
@@ -161,5 +161,109 @@ export const taskService = {
 
     await taskRepository.addTimelineEvent(id, noteEvent)
     return taskRepository.update(id, { assignedAgentId: agentId })
+  },
+
+  // Record a retry attempt
+  async recordRetryAttempt(
+    id: number,
+    callId: string,
+    outcome: string,
+    duration: number,
+    notes?: string
+  ): Promise<Task | undefined> {
+    const task = await taskRepository.findById(id)
+    if (!task) return undefined
+
+    const attemptNumber = (task.retryCount || 0) + 1
+
+    const attempt: RetryAttempt = {
+      attemptNumber,
+      callId,
+      timestamp: new Date().toISOString(),
+      outcome,
+      duration,
+      notes,
+    }
+
+    // Add timeline event for retry
+    const retryEvent: TimelineEvent = {
+      id: generateEventId('retry-attempt'),
+      type: 'retry-attempt',
+      timestamp: formatTimestamp(),
+      title: `Call Attempt #${attemptNumber}`,
+      attemptNumber,
+      callId,
+      outcome,
+      duration,
+      notes,
+    }
+
+    await taskRepository.addTimelineEvent(id, retryEvent)
+    return taskRepository.addRetryAttempt(id, attempt)
+  },
+
+  // Schedule a retry for a task
+  async scheduleRetry(
+    id: number,
+    reason: string,
+    delayMinutes: number = 60
+  ): Promise<Task | undefined> {
+    const task = await taskRepository.findById(id)
+    if (!task) return undefined
+
+    const nextRetryAt = new Date(Date.now() + delayMinutes * 60 * 1000)
+
+    // Add timeline event for scheduled retry
+    const scheduleEvent: TimelineEvent = {
+      id: generateEventId('retry-scheduled'),
+      type: 'retry-scheduled',
+      timestamp: formatTimestamp(),
+      title: 'Retry Scheduled',
+      attemptNumber: (task.retryCount || 0) + 1,
+      reason,
+      scheduledFor: nextRetryAt.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }),
+    }
+
+    await taskRepository.addTimelineEvent(id, scheduleEvent)
+    return taskRepository.scheduleRetry(id, nextRetryAt)
+  },
+
+  // Add voicemail event
+  async recordVoicemail(id: number, callId: string): Promise<Task | undefined> {
+    const voicemailEvent: TimelineEvent = {
+      id: generateEventId('voicemail'),
+      type: 'voicemail',
+      timestamp: formatTimestamp(),
+      title: 'Voicemail Left',
+      callId,
+      description: 'A voicemail message was left for the patient.',
+    }
+
+    return taskRepository.addTimelineEvent(id, voicemailEvent)
+  },
+
+  // Check if task has exceeded max retries
+  async hasExceededMaxRetries(id: number): Promise<boolean> {
+    const task = await taskRepository.findById(id)
+    if (!task) return false
+
+    const maxRetries = task.maxRetries || 5
+    return (task.retryCount || 0) >= maxRetries
+  },
+
+  // Get pending retry tasks
+  async getPendingRetryTasks(): Promise<TaskWithPatient[]> {
+    return taskRepository.findPendingRetries()
+  },
+
+  // Clear retry schedule when task is completed
+  async clearRetrySchedule(id: number): Promise<Task | undefined> {
+    return taskRepository.clearRetrySchedule(id)
   },
 }

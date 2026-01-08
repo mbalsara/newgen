@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed-agents": "tsx src/seed-agents.ts"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
@@ -26,8 +27,10 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "dotenv": "catalog:",
     "drizzle-kit": "catalog:",
     "tsup": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -1,40 +1,35 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Agent } from '@/lib/agent-types'
-import { fetchAgents, getSquads, type Squad } from '@/lib/vapi-api'
-import { AgentsTable } from '@/components/agents-table'
-import { AgentDrawer } from '@/components/agent-drawer'
+import { api, type Agent } from '@/lib/api-client'
+import { AgentConfigDrawer } from '@/components/agents/agent-config-drawer'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, RefreshCw, Bot, Users } from 'lucide-react'
+import { Plus, RefreshCw, Bot, Users, Settings } from 'lucide-react'
 import { toast } from 'sonner'
-import { aiAgents, staffMembers } from '@/lib/mock-agents'
 
 export default function SettingsPage() {
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [squads, setSquads] = useState<Squad[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  // Local agents (from our database)
+  const [localAgents, setLocalAgents] = useState<{ ai: Agent[]; staff: Agent[] }>({ ai: [], staff: [] })
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Config drawer for local agents
+  const [configDrawerOpen, setConfigDrawerOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
 
   const loadData = useCallback(async (showToast = false) => {
     try {
-      const [agentsData, squadsData] = await Promise.all([fetchAgents(), getSquads()])
-      setAgents(agentsData)
-      setSquads(squadsData)
+      const localData = await api.agents.grouped().catch(() => ({ ai: [], staff: [] }))
+      setLocalAgents(localData)
       if (showToast) {
         toast.success('Data refreshed')
       }
     } catch (error) {
       console.error('Error loading data:', error)
-      // Don't show error toast since API might not be configured
     }
   }, [])
 
   useEffect(() => {
-    setIsLoading(true)
-    loadData().finally(() => setIsLoading(false))
+    loadData()
   }, [loadData])
 
   const handleRefresh = async () => {
@@ -45,12 +40,12 @@ export default function SettingsPage() {
 
   const handleAddAgent = () => {
     setSelectedAgent(null)
-    setDrawerOpen(true)
+    setConfigDrawerOpen(true)
   }
 
-  const handleEditAgent = (agent: Agent) => {
+  const handleConfigureAgent = (agent: Agent) => {
     setSelectedAgent(agent)
-    setDrawerOpen(true)
+    setConfigDrawerOpen(true)
   }
 
   const handleSaved = () => {
@@ -86,74 +81,100 @@ export default function SettingsPage() {
             <Users className="h-4 w-4 mr-2" />
             Staff Members
           </TabsTrigger>
-          <TabsTrigger value="vapi">VAPI Agents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ai-agents" className="space-y-4 mt-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            {aiAgents.map(agent => (
-              <Card key={agent.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
-                      <span className="text-lg">{agent.avatar}</span>
+          {localAgents.ai.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No AI agents configured yet.</p>
+              <Button className="mt-4" onClick={handleAddAgent}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add AI Agent
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              {localAgents.ai.map(agent => (
+                <Card
+                  key={agent.id}
+                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => handleConfigureAgent(agent)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
+                        <span className="text-lg">{agent.avatar || '🤖'}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base">{agent.name}</CardTitle>
+                        <CardDescription className="truncate">{agent.role}</CardDescription>
+                      </div>
+                      <Settings className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <div>
-                      <CardTitle className="text-base">{agent.name}</CardTitle>
-                      <CardDescription>{agent.role}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Type</span>
+                      <span className="font-medium text-green-600">AI Agent</span>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium text-green-600">AI Agent</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    {agent.specialty && agent.specialty !== 'general' && (
+                      <div className="flex items-center justify-between text-sm mt-1">
+                        <span className="text-muted-foreground">Specialty</span>
+                        <span className="font-medium capitalize">{agent.specialty}</span>
+                      </div>
+                    )}
+                    {agent.voiceId && (
+                      <div className="flex items-center justify-between text-sm mt-1">
+                        <span className="text-muted-foreground">Voice</span>
+                        <span className="font-medium text-blue-600">Configured</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="staff" className="space-y-4 mt-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            {staffMembers.map(staff => (
-              <Card key={staff.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-100">
-                      <span className="text-sm font-medium">{staff.avatar}</span>
+          {localAgents.staff.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No staff members configured yet.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              {localAgents.staff.map(staff => (
+                <Card key={staff.id}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-100">
+                        <span className="text-sm font-medium">{staff.avatar || staff.name.slice(0, 2).toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">{staff.name}</CardTitle>
+                        <CardDescription>{staff.role}</CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">{staff.name}</CardTitle>
-                      <CardDescription>{staff.role}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Type</span>
+                      <span className="font-medium text-amber-600">Staff</span>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium text-amber-600">Staff</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="vapi" className="mt-4">
-          <AgentsTable
-            agents={agents}
-            squads={squads}
-            onEdit={handleEditAgent}
-            isLoading={isLoading}
-          />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
-      <AgentDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+      {/* Agent Config Drawer */}
+      <AgentConfigDrawer
+        open={configDrawerOpen}
+        onOpenChange={setConfigDrawerOpen}
         agent={selectedAgent}
         onSaved={handleSaved}
       />

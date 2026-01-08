@@ -55,6 +55,17 @@ export const BaseTimelineEventSchema = z.object({
 export const TimelineEventSchema = BaseTimelineEventSchema.passthrough()
 export type TimelineEvent = z.infer<typeof TimelineEventSchema>
 
+// Retry attempt history
+export const RetryAttemptSchema = z.object({
+  attemptNumber: z.number(),
+  callId: z.string(),
+  timestamp: z.string(),
+  outcome: z.string(), // 'no-answer', 'voicemail', 'busy', 'disconnected', 'failed'
+  duration: z.number(), // in seconds
+  notes: z.string().optional(),
+})
+export type RetryAttempt = z.infer<typeof RetryAttemptSchema>
+
 // Task schema (without patient join)
 export const TaskSchema = z.object({
   id: z.number(),
@@ -67,6 +78,13 @@ export const TaskSchema = z.object({
   assignedAgentId: z.string().nullable(),
   timeline: z.array(TimelineEventSchema).default([]),
   ehrSync: EhrSyncSchema.default({ status: 'pending', lastSync: null }),
+  // Retry tracking
+  retryCount: z.number().default(0),
+  maxRetries: z.number().default(5),
+  lastAttemptAt: z.coerce.date().nullable(),
+  nextRetryAt: z.coerce.date().nullable(),
+  retryHistory: z.array(RetryAttemptSchema).default([]),
+  // Meta
   unread: z.boolean().default(true),
   time: z.string().nullable(),
   createdAt: z.coerce.date(),
