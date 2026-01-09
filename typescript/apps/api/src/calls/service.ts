@@ -2,7 +2,8 @@ import { callRepository } from './repository'
 import { vapiApi, parseVapiMessages, detectAbusiveLanguage, shouldCompleteTask, getCallEndedReasonDescription } from './vapi-handler'
 import { taskService } from '../tasks/service'
 import { agentService } from '../agents/service'
-import type { Call, NewCall, TranscriptMessage } from '@repo/database'
+import { buildCallPrompt, buildAssistantOverrides, type PatientContext } from '../agents/prompt-builder'
+import type { Call, NewCall, TranscriptMessage, Agent } from '@repo/database'
 
 export const callService = {
   // Get all calls
@@ -20,30 +21,43 @@ export const callService = {
     return callRepository.findByTaskId(taskId)
   },
 
-  // Start an outbound call
+  // Start an outbound call with runtime prompt injection
   async startOutboundCall(params: {
     taskId: number
     agentId: string
     patientName: string
     phoneNumberId: string // VAPI phone number ID
     customerNumber: string // Patient phone number
+    patientContext?: PatientContext // Optional patient context for prompt variables
   }): Promise<{ call: Call; vapiCallId: string } | { error: string }> {
-    // Get the agent's VAPI assistant ID
+    // Get the agent's VAPI assistant ID and config
     const agent = await agentService.getAgentById(params.agentId)
     if (!agent || !agent.vapiAssistantId) {
       return { error: 'Agent not found or has no VAPI assistant ID' }
     }
 
-    // Start the VAPI call
+    // Get the task with patient info for prompt building
+    const task = await taskService.getTaskById(params.taskId)
+    if (!task) {
+      return { error: 'Task not found' }
+    }
+
+    // Build runtime prompt configuration from agent config
+    const promptConfig = buildCallPrompt({
+      agent,
+      task,
+      patientContext: params.patientContext,
+    })
+
+    // Build VAPI assistant overrides
+    const assistantOverrides = buildAssistantOverrides(promptConfig)
+
+    // Start the VAPI call with runtime overrides
     const vapiResult = await vapiApi.startCall({
       assistantId: agent.vapiAssistantId,
       phoneNumber: params.phoneNumberId,
       customerNumber: params.customerNumber,
-      assistantOverrides: {
-        variableValues: {
-          patient_name: params.patientName,
-        },
-      },
+      assistantOverrides,
     })
 
     if (!vapiResult) {
@@ -122,7 +136,7 @@ export const callService = {
 
   // Process call completion (update task based on outcome)
   async processCallCompletion(callId: string): Promise<{
-    action: 'completed' | 'escalated' | 'flagged'
+    action: 'completed' | 'escalated' | 'flagged' | 'retry_scheduled' | 'voicemail'
     message: string
   } | null> {
     const call = await callRepository.findById(callId)
@@ -130,6 +144,14 @@ export const callService = {
 
     const task = await taskService.getTaskById(call.taskId)
     if (!task) return null
+
+    // Get the agent for retry/fallback settings
+    const agent = call.agentId ? await agentService.getAgentById(call.agentId) : null
+
+    // Calculate call duration in seconds
+    const duration = call.startedAt && call.endedAt
+      ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+      : 0
 
     // Add call event to task timeline
     await taskService.addCallEvent(call.taskId, {
@@ -140,9 +162,10 @@ export const callService = {
     // Check for abusive language
     if (call.hasAbusiveLanguage) {
       // Flag patient and escalate
+      const fallbackStaff = await this.findFallbackStaff(agent)
       await taskService.escalateTask(
         call.taskId,
-        'sarah', // Default staff for escalation
+        fallbackStaff,
         'Patient flagged for abusive language during call'
       )
       return {
@@ -154,24 +177,131 @@ export const callService = {
     // Determine outcome based on ended reason
     const reasonInfo = getCallEndedReasonDescription(call.endedReason)
 
+    // Handle voicemail - not a complete success, schedule retry
+    if (call.endedReason === 'voicemail') {
+      await taskService.recordVoicemail(call.taskId, callId)
+      await taskService.recordRetryAttempt(call.taskId, callId, 'voicemail', duration)
+
+      // Check if max retries exceeded
+      const exceededRetries = await taskService.hasExceededMaxRetries(call.taskId)
+      if (exceededRetries) {
+        const fallbackStaff = await this.findFallbackStaff(agent)
+        await taskService.escalateTask(
+          call.taskId,
+          fallbackStaff,
+          `Maximum retry attempts reached. Last outcome: voicemail`
+        )
+        return {
+          action: 'escalated',
+          message: 'Max retries exceeded after voicemail attempts. Task escalated.',
+        }
+      }
+
+      // Schedule retry
+      const delayMinutes = agent?.retryDelayMinutes || 60
+      await taskService.scheduleRetry(call.taskId, 'Voicemail left, awaiting callback or retry', delayMinutes)
+      return {
+        action: 'voicemail',
+        message: 'Voicemail left. Retry scheduled.',
+      }
+    }
+
+    // Handle success cases
     if (reasonInfo.isSuccess) {
+      await taskService.clearRetrySchedule(call.taskId)
       await taskService.completeTask(call.taskId, reasonInfo.description)
       return {
         action: 'completed',
         message: reasonInfo.description,
       }
-    } else {
-      // Escalate for follow-up
-      await taskService.escalateTask(
-        call.taskId,
-        'sarah',
-        `Call outcome: ${reasonInfo.title} - ${reasonInfo.description}`
-      )
+    }
+
+    // Handle retryable failures (no-answer, busy, disconnected, etc.)
+    if (reasonInfo.canRetry) {
+      // Map ended reason to outcome string
+      const outcomeMap: Record<string, string> = {
+        'customer-did-not-answer': 'no-answer',
+        'customer-busy': 'busy',
+        'customer-ended-call': 'disconnected',
+        'silence-timed-out': 'disconnected',
+        'exceeded-max-duration': 'disconnected',
+        'assistant-error': 'failed',
+        'assistant-did-not-give-response': 'failed',
+        'assistant-request-failed': 'failed',
+        'pipeline-error': 'failed',
+      }
+      const outcome = outcomeMap[call.endedReason || ''] || 'failed'
+
+      await taskService.recordRetryAttempt(call.taskId, callId, outcome, duration, reasonInfo.title)
+
+      // Check if max retries exceeded
+      const exceededRetries = await taskService.hasExceededMaxRetries(call.taskId)
+      if (exceededRetries) {
+        const fallbackStaff = await this.findFallbackStaff(agent)
+        await taskService.escalateTask(
+          call.taskId,
+          fallbackStaff,
+          `Maximum retry attempts (${task.maxRetries || 5}) reached. Last outcome: ${reasonInfo.title}`
+        )
+        return {
+          action: 'escalated',
+          message: `Max retries exceeded. Task escalated to staff.`,
+        }
+      }
+
+      // Schedule retry
+      const delayMinutes = agent?.retryDelayMinutes || 60
+      await taskService.scheduleRetry(call.taskId, `${reasonInfo.title}: ${reasonInfo.description}`, delayMinutes)
       return {
-        action: 'escalated',
-        message: `${reasonInfo.title}: ${reasonInfo.description}`,
+        action: 'retry_scheduled',
+        message: `${reasonInfo.title}. Retry scheduled.`,
       }
     }
+
+    // Non-retryable failures - escalate immediately
+    const fallbackStaff = await this.findFallbackStaff(agent)
+    await taskService.escalateTask(
+      call.taskId,
+      fallbackStaff,
+      `Call outcome: ${reasonInfo.title} - ${reasonInfo.description}`
+    )
+    return {
+      action: 'escalated',
+      message: `${reasonInfo.title}: ${reasonInfo.description}`,
+    }
+  },
+
+  // Find fallback staff for escalation
+  async findFallbackStaff(agent: Agent | null | undefined): Promise<string> {
+    // Default fallback
+    const DEFAULT_FALLBACK = 'sarah'
+
+    if (!agent) return DEFAULT_FALLBACK
+
+    // Try primary fallback
+    if (agent.fallbackStaffId) {
+      const staff = await agentService.getAgentById(agent.fallbackStaffId)
+      if (staff && staff.type === 'staff') {
+        return staff.id
+      }
+    }
+
+    // Try backup list in order
+    const fallbackList = agent.fallbackStaffIds || []
+    for (const staffId of fallbackList) {
+      const staff = await agentService.getAgentById(staffId)
+      if (staff && staff.type === 'staff') {
+        return staff.id
+      }
+    }
+
+    // Fall back to any available staff
+    const allStaff = await agentService.getStaff()
+    if (allStaff.length > 0) {
+      return allStaff[0].id
+    }
+
+    return DEFAULT_FALLBACK
   },
 
   // VAPI webhook handler

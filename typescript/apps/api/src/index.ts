@@ -1,8 +1,15 @@
 // Load environment variables BEFORE other imports
 // Load .env first, then .env.local (local overrides base)
 import { config } from 'dotenv'
-config({ path: '.env' })
-config({ path: '.env.local', override: true })
+import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const apiRoot = resolve(__dirname, '..')
+
+config({ path: resolve(apiRoot, '.env') })
+config({ path: resolve(apiRoot, '.env.local'), override: true })
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'

@@ -1,5 +1,5 @@
 import { eq, and, like, or, inArray, desc } from 'drizzle-orm'
-import { db, tasks, patients, type Task, type NewTask, type TimelineEvent, type TaskStatus, type TaskType, type Patient } from '@repo/database'
+import { db, tasks, patients, type Task, type NewTask, type TimelineEvent, type TaskStatus, type TaskType, type Patient, type RetryAttempt } from '@repo/database'
 
 export interface TaskFilters {
   statuses?: TaskStatus[]
@@ -171,5 +171,49 @@ export const taskRepository = {
   async seedTasks(taskList: NewTask[]): Promise<Task[]> {
     const results = await db.insert(tasks).values(taskList).returning()
     return results
+  },
+
+  // Add retry attempt to history
+  async addRetryAttempt(id: number, attempt: RetryAttempt): Promise<Task | undefined> {
+    const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1)
+    if (result.length === 0) return undefined
+
+    const task = result[0]
+    const retryHistory = [...(task.retryHistory || []), attempt]
+    const retryCount = (task.retryCount || 0) + 1
+
+    return this.update(id, {
+      retryHistory,
+      retryCount,
+      lastAttemptAt: new Date(),
+    })
+  },
+
+  // Schedule retry for task
+  async scheduleRetry(id: number, nextRetryAt: Date): Promise<Task | undefined> {
+    return this.update(id, { nextRetryAt })
+  },
+
+  // Get tasks pending retry
+  async findPendingRetries(): Promise<TaskWithPatient[]> {
+    const now = new Date()
+    const results = await db
+      .select({
+        task: tasks,
+        patient: patients,
+      })
+      .from(tasks)
+      .innerJoin(patients, eq(tasks.patientId, patients.id))
+      .orderBy(desc(tasks.nextRetryAt))
+
+    // Filter for tasks with pending retries that are due
+    return results
+      .filter(r => r.task.nextRetryAt && new Date(r.task.nextRetryAt) <= now)
+      .map(r => ({ ...r.task, patient: r.patient }))
+  },
+
+  // Clear retry schedule
+  async clearRetrySchedule(id: number): Promise<Task | undefined> {
+    return this.update(id, { nextRetryAt: null })
   },
 }
