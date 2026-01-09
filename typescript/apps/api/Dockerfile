@@ -4,7 +4,7 @@
 FROM node:22-alpine AS builder
 
 # Install pnpm
-RUN npm install -g pnpm@8.15.0
+RUN npm install -g pnpm@9.15.0
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN pnpm --filter @repo/api build
 FROM node:22-alpine
 
 # Install pnpm
-RUN npm install -g pnpm@8.15.0
+RUN npm install -g pnpm@9.15.0
 
 WORKDIR /app
 

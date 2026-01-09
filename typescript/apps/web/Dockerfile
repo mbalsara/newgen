@@ -1,6 +1,6 @@
 # Multi-stage build for optimized production image
 FROM node:18-alpine AS base
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
 # Stage 1: Install dependencies
