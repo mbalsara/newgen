@@ -57,6 +57,10 @@ export const BankQuestionSchema = z.object({
 })
 export type BankQuestion = z.infer<typeof BankQuestionSchema>
 
+// Condition logic for multiple conditions
+export const ConditionLogicSchema = z.enum(['and', 'or'])
+export type ConditionLogic = z.infer<typeof ConditionLogicSchema>
+
 // Agent question (question added to an agent's script)
 export const AgentQuestionSchema = z.object({
   id: z.string(),
@@ -68,7 +72,9 @@ export const AgentQuestionSchema = z.object({
   responseType: ResponseTypeSchema,
   choices: z.array(z.string()).optional(),
   outputVariable: z.string(),
-  condition: QuestionConditionSchema.optional(), // When to ask this question
+  condition: QuestionConditionSchema.optional(), // Single condition (backward compatible)
+  conditions: z.array(QuestionConditionSchema).optional(), // Multiple conditions
+  conditionLogic: ConditionLogicSchema.optional(), // AND/OR for multiple conditions
   required: z.boolean().default(true),
   sortOrder: z.number(),
 })

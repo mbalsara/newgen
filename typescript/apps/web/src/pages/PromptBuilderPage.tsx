@@ -17,6 +17,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -38,6 +45,7 @@ import {
   Copy,
   Clock,
   AlertCircle,
+  GitBranch,
 } from 'lucide-react'
 import {
   DEFAULT_CATEGORIES,
@@ -191,6 +199,7 @@ interface BuilderPanelProps {
   onAddCustomQuestion: () => void
   isDraggingFromBank: boolean
   onDropFromBank: (index: number) => void
+  onQuestionUpdate: (question: AgentQuestion) => void
 }
 
 function BuilderPanel({
@@ -201,27 +210,42 @@ function BuilderPanel({
   onAddCustomQuestion,
   isDraggingFromBank,
   onDropFromBank,
+  onQuestionUpdate,
 }: BuilderPanelProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
+
+  // Condition dialog state
+  const [showConditionDialog, setShowConditionDialog] = useState(false)
+  const [conditionDialogQuestion, setConditionDialogQuestion] = useState<AgentQuestion | null>(null)
+  const [conditionRows, setConditionRows] = useState<Array<{ field: string; operator: string; value: string }>>([])
+  const [conditionLogic, setConditionLogic] = useState<'and' | 'or'>('and')
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index)
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  // Handle drag over for both internal reordering and bank drops
+  const handleCardDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
-    if (draggedIndex === null || draggedIndex === index) return
+    e.stopPropagation()
 
-    const newQuestions = [...questions]
-    const [removed] = newQuestions.splice(draggedIndex, 1)
-    newQuestions.splice(index, 0, removed)
+    // Determine insert position based on cursor position
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    let insertIndex = e.clientY < midpoint ? index : index + 1
 
-    // Update sort orders
-    const updated = newQuestions.map((q, i) => ({ ...q, sortOrder: i }))
-    onQuestionsChange(updated)
-    setDraggedIndex(index)
+    // For internal drags, adjust the index to account for the dragged item
+    if (draggedIndex !== null) {
+      // Don't show indicator at the current position or immediately after
+      if (insertIndex === draggedIndex || insertIndex === draggedIndex + 1) {
+        setDropTargetIndex(null)
+        return
+      }
+    }
+
+    setDropTargetIndex(insertIndex)
   }
 
   const handleDragEnd = () => {
@@ -229,19 +253,30 @@ function BuilderPanel({
     setDropTargetIndex(null)
   }
 
-  // Handle drops from Question Bank
-  const handleBankDragOver = (e: React.DragEvent, index: number) => {
-    if (!isDraggingFromBank) return
+  // Handle drop - works for both internal reordering and bank drops
+  const handleDrop = (e: React.DragEvent, index: number) => {
     e.preventDefault()
     e.stopPropagation()
-    setDropTargetIndex(index)
-  }
 
-  const handleBankDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    e.stopPropagation()
+    if (draggedIndex !== null && dropTargetIndex !== null) {
+      // Internal reordering
+      const newQuestions = [...questions]
+      const [removed] = newQuestions.splice(draggedIndex, 1)
+
+      // Adjust target index if we removed an item before it
+      const adjustedIndex = dropTargetIndex > draggedIndex ? dropTargetIndex - 1 : dropTargetIndex
+      newQuestions.splice(adjustedIndex, 0, removed)
+
+      // Update sort orders
+      const updated = newQuestions.map((q, i) => ({ ...q, sortOrder: i }))
+      onQuestionsChange(updated)
+    } else if (isDraggingFromBank) {
+      // Drop from bank
+      onDropFromBank(index)
+    }
+
     setDropTargetIndex(null)
-    onDropFromBank(index)
+    setDraggedIndex(null)
   }
 
   const handleContainerDragLeave = (e: React.DragEvent) => {
@@ -280,32 +315,88 @@ function BuilderPanel({
   // Estimate call duration (roughly 30 seconds per question)
   const estimatedMinutes = Math.ceil(questions.length * 0.5)
 
-  // Drop zone indicator component
-  const DropZone = ({ index }: { index: number }) => (
-    <div
-      className={cn(
-        "transition-all duration-150",
-        dropTargetIndex === index
-          ? "h-16 border-2 border-dashed border-primary rounded-lg bg-primary/10 flex items-center justify-center"
-          : isDraggingFromBank
-            ? "h-2 hover:h-16 hover:border-2 hover:border-dashed hover:border-primary/50 hover:rounded-lg hover:bg-primary/5"
-            : "h-0"
-      )}
-      onDragOver={(e) => handleBankDragOver(e, index)}
-      onDrop={(e) => handleBankDrop(e, index)}
-    >
-      {dropTargetIndex === index && (
-        <span className="text-sm text-primary font-medium">Drop here</span>
-      )}
-    </div>
-  )
+  // Handle drag over the end zone (after all questions)
+  const handleEndZoneDragOver = (e: React.DragEvent) => {
+    // Only for bank drops or internal drags
+    if (!isDraggingFromBank && draggedIndex === null) return
+    e.preventDefault()
+    e.stopPropagation()
+
+    // For internal drags, don't show if dragging the last item
+    if (draggedIndex !== null && draggedIndex === questions.length - 1) {
+      setDropTargetIndex(null)
+      return
+    }
+
+    setDropTargetIndex(questions.length)
+  }
+
+  // Condition dialog handlers
+  const addConditionRow = () => {
+    setConditionRows([...conditionRows, { field: '', operator: 'equals', value: '' }])
+  }
+
+  const removeConditionRow = (index: number) => {
+    setConditionRows(conditionRows.filter((_, i) => i !== index))
+  }
+
+  const updateConditionRow = (index: number, updates: Partial<{ field: string; operator: string; value: string }>) => {
+    setConditionRows(conditionRows.map((row, i) => i === index ? { ...row, ...updates } : row))
+  }
+
+  const saveConditions = () => {
+    if (!conditionDialogQuestion) return
+
+    // Filter out empty rows
+    const validRows = conditionRows.filter(r => r.field.trim() !== '')
+
+    if (validRows.length === 0) {
+      // Clear all conditions
+      onQuestionUpdate({
+        ...conditionDialogQuestion,
+        condition: undefined,
+        conditions: undefined,
+        conditionLogic: undefined,
+      })
+    } else if (validRows.length === 1) {
+      // Single condition - use the old format for backward compatibility
+      onQuestionUpdate({
+        ...conditionDialogQuestion,
+        condition: {
+          field: validRows[0].field,
+          operator: validRows[0].operator as 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than',
+          value: validRows[0].value,
+        },
+        conditions: undefined,
+        conditionLogic: undefined,
+      })
+    } else {
+      // Multiple conditions
+      onQuestionUpdate({
+        ...conditionDialogQuestion,
+        condition: undefined,
+        conditions: validRows.map(r => ({
+          field: r.field,
+          operator: r.operator as 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than',
+          value: r.value,
+        })),
+        conditionLogic,
+      })
+    }
+
+    setShowConditionDialog(false)
+    setConditionDialogQuestion(null)
+  }
+
+  const cancelConditionDialog = () => {
+    setShowConditionDialog(false)
+    setConditionDialogQuestion(null)
+    setConditionRows([])
+  }
 
   return (
     <div
-      className={cn(
-        "flex flex-col h-full overflow-hidden transition-colors",
-        isDraggingFromBank && "bg-primary/5"
-      )}
+      className="flex flex-col h-full overflow-hidden"
       onDragLeave={handleContainerDragLeave}
     >
       <div className="shrink-0 p-4 border-b bg-background">
@@ -328,7 +419,7 @@ function BuilderPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-2">
+        <div className="p-4">
           {questions.length === 0 && (
             <div
               className={cn(
@@ -337,8 +428,13 @@ function BuilderPanel({
                   ? "border-2 border-dashed border-primary bg-primary/5"
                   : ""
               )}
-              onDragOver={(e) => handleBankDragOver(e, 0)}
-              onDrop={(e) => handleBankDrop(e, 0)}
+              onDragOver={(e) => {
+                if (isDraggingFromBank) {
+                  e.preventDefault()
+                  setDropTargetIndex(0)
+                }
+              }}
+              onDrop={(e) => handleDrop(e, 0)}
             >
               <div className={cn(
                 "w-16 h-16 rounded-full flex items-center justify-center mb-4",
@@ -364,20 +460,26 @@ function BuilderPanel({
             </div>
           )}
           {questions.length > 0 && (
-            <>
-              {/* Drop zone at the top */}
-              <DropZone index={0} />
+            <div className="relative">
               {questions.map((question, index) => (
-                <div key={question.id}>
+                <div key={question.id} className="relative">
+                  {/* Drop indicator line - shows above this card when dropTargetIndex === index */}
+                  {(isDraggingFromBank || draggedIndex !== null) && dropTargetIndex === index && (
+                    <div className="absolute -top-1 left-0 right-0 h-0.5 bg-primary z-10">
+                      <div className="absolute -left-1 -top-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                      <div className="absolute -right-1 -top-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                    </div>
+                  )}
                   {/* Question card */}
                   <div
                     draggable
                     onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragOver={(e) => handleCardDragOver(e, index)}
                     onDragEnd={handleDragEnd}
+                    onDrop={(e) => handleDrop(e, dropTargetIndex ?? index)}
                     onClick={() => onSelectQuestion(question)}
                     className={cn(
-                      'group flex items-start gap-3 p-3 rounded-lg border bg-card cursor-pointer transition-all',
+                      'group flex items-start gap-3 p-3 rounded-lg border bg-card cursor-pointer transition-all mb-2',
                       selectedQuestionId === question.id
                         ? 'ring-2 ring-primary border-primary'
                         : 'hover:border-primary/50',
@@ -412,18 +514,69 @@ function BuilderPanel({
                       </p>
                       <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                         <span>→ {question.outputVariable}</span>
-                        {question.condition && (
-                          <>
-                            <span>·</span>
-                            <span className="text-amber-600">
-                              Conditional
-                            </span>
-                          </>
-                        )}
                       </div>
+                      {/* Show conditions */}
+                      {(question.condition || question.conditions?.length) && (
+                        <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                          <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                            <GitBranch className="h-3 w-3 shrink-0" />
+                            <span className="font-medium">If</span>
+                            {question.conditions?.length ? (
+                              <span className="truncate">
+                                {question.conditions.map((c, i) => (
+                                  <span key={i}>
+                                    {i > 0 && (
+                                      <span className="font-semibold mx-1">
+                                        {question.conditionLogic?.toUpperCase() || 'AND'}
+                                      </span>
+                                    )}
+                                    <code className="bg-amber-500/20 px-1 rounded">{c.field}</code>
+                                    {' '}{c.operator.replace('_', ' ')}{' '}
+                                    <code className="bg-amber-500/20 px-1 rounded">{String(c.value ?? '')}</code>
+                                  </span>
+                                ))}
+                              </span>
+                            ) : question.condition ? (
+                              <span className="truncate">
+                                <code className="bg-amber-500/20 px-1 rounded">{question.condition.field}</code>
+                                {' '}{question.condition.operator.replace('_', ' ')}{' '}
+                                <code className="bg-amber-500/20 px-1 rounded">{String(question.condition.value ?? '')}</code>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Condition Button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setConditionDialogQuestion(question)
+                          setConditionRows(
+                            question.conditions?.length
+                              ? question.conditions.map(c => ({ field: c.field, operator: c.operator, value: String(c.value ?? '') }))
+                              : question.condition?.field
+                                ? [{ field: question.condition.field, operator: question.condition.operator, value: String(question.condition.value ?? '') }]
+                                : [{ field: '', operator: 'equals', value: '' }]
+                          )
+                          setConditionLogic(question.conditionLogic || 'and')
+                          setShowConditionDialog(true)
+                        }}
+                        title="Add condition"
+                      >
+                        <GitBranch
+                          className={cn(
+                            'h-4 w-4',
+                            (question.condition || question.conditions?.length) ? 'text-amber-500' : 'text-muted-foreground'
+                          )}
+                        />
+                      </Button>
+
                       <Button
                         variant="ghost"
                         size="icon"
@@ -467,14 +620,166 @@ function BuilderPanel({
                       </Button>
                     </div>
                   </div>
-                  {/* Drop zone after each question */}
-                  <DropZone index={index + 1} />
                 </div>
               ))}
-            </>
+              {/* End zone - always available for dropping at the end */}
+              <div
+                className={cn(
+                  "relative min-h-[60px] rounded-lg transition-colors",
+                  (isDraggingFromBank || draggedIndex !== null) && "border-2 border-dashed border-muted-foreground/30"
+                )}
+                onDragOver={handleEndZoneDragOver}
+                onDrop={(e) => handleDrop(e, questions.length)}
+              >
+                {/* Drop indicator line at the end */}
+                {(isDraggingFromBank || draggedIndex !== null) && dropTargetIndex === questions.length && (
+                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10">
+                    <div className="absolute -left-1 -top-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                    <div className="absolute -right-1 -top-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                  </div>
+                )}
+                {(isDraggingFromBank || draggedIndex !== null) && (
+                  <div className="flex items-center justify-center h-full py-4 text-sm text-muted-foreground">
+                    {isDraggingFromBank ? "Drop here to add at end" : "Move to end"}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Condition Builder Dialog */}
+      <Dialog open={showConditionDialog} onOpenChange={(open) => !open && cancelConditionDialog()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Condition Builder</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Only ask "{conditionDialogQuestion?.label}" when these conditions are met:
+            </p>
+
+            {/* Logic selector for multiple conditions */}
+            {conditionRows.length > 1 && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                <Label className="text-sm">Match</Label>
+                <Select value={conditionLogic} onValueChange={(v) => setConditionLogic(v as 'and' | 'or')}>
+                  <SelectTrigger className="w-24 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="and">ALL</SelectItem>
+                    <SelectItem value="or">ANY</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">of the following conditions</span>
+              </div>
+            )}
+
+            {/* Condition rows */}
+            <div className="space-y-3">
+              {conditionRows.map((row, index) => (
+                <div key={index} className="flex items-start gap-2">
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      {index === 0 && <Label className="text-xs">Variable</Label>}
+                      <Input
+                        placeholder="e.g., insurance_changed"
+                        value={row.field}
+                        onChange={(e) => updateConditionRow(index, { field: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      {index === 0 && <Label className="text-xs">Operator</Label>}
+                      <Select
+                        value={row.operator}
+                        onValueChange={(value) => updateConditionRow(index, { operator: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="equals">equals</SelectItem>
+                          <SelectItem value="not_equals">not equals</SelectItem>
+                          <SelectItem value="contains">contains</SelectItem>
+                          <SelectItem value="greater_than">greater than</SelectItem>
+                          <SelectItem value="less_than">less than</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      {index === 0 && <Label className="text-xs">Value</Label>}
+                      <Input
+                        placeholder="e.g., yes"
+                        value={row.value}
+                        onChange={(e) => updateConditionRow(index, { value: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn("h-9 w-9 shrink-0", index === 0 && "mt-5")}
+                    onClick={() => removeConditionRow(index)}
+                    disabled={conditionRows.length === 1}
+                  >
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add row button */}
+            <Button variant="outline" size="sm" onClick={addConditionRow} className="w-full">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Condition
+            </Button>
+
+            {/* Preview */}
+            {conditionRows.some(r => r.field.trim()) && (
+              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                <p className="text-muted-foreground mb-1">Preview:</p>
+                <p>
+                  Ask this question if{' '}
+                  {conditionRows
+                    .filter(r => r.field.trim())
+                    .map((r, i, arr) => (
+                      <span key={i}>
+                        <code className="bg-background px-1 rounded">{r.field}</code>
+                        {' '}{r.operator.replace('_', ' ')}{' '}
+                        <code className="bg-background px-1 rounded">{r.value || '""'}</code>
+                        {i < arr.length - 1 && (
+                          <span className="text-amber-600 font-medium"> {conditionLogic.toUpperCase()} </span>
+                        )}
+                      </span>
+                    ))
+                  }
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={cancelConditionDialog}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConditionRows([{ field: '', operator: 'equals', value: '' }])
+              }}
+              disabled={conditionRows.length === 1 && !conditionRows[0].field}
+            >
+              Clear All
+            </Button>
+            <Button onClick={saveConditions}>
+              Save Conditions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -836,6 +1141,20 @@ export default function PromptBuilderPage() {
   const [selectedQuestion, setSelectedQuestion] = useState<AgentQuestion | null>(null)
   const [draggedBankQuestion, setDraggedBankQuestion] = useState<BankQuestion | null>(null)
 
+  // Custom question dialog state
+  const [showCustomDialog, setShowCustomDialog] = useState(false)
+  const [customQuestion, setCustomQuestion] = useState({
+    label: '',
+    question: '',
+    outputVariable: '',
+    responseType: 'text' as 'yes_no' | 'text' | 'number' | 'date' | 'choice',
+    required: true,
+    hasCondition: false,
+    conditionField: '',
+    conditionOperator: 'equals' as 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than',
+    conditionValue: '',
+  })
+
   // Load agent
   useEffect(() => {
     if (id && id !== 'new') {
@@ -929,22 +1248,53 @@ export default function PromptBuilderPage() {
     setDraggedBankQuestion(null)
   }, [draggedBankQuestion])
 
-  // Add custom question
-  const addCustomQuestion = useCallback(() => {
-    const customQuestion: AgentQuestion = {
+  // Open custom question dialog
+  const openCustomQuestionDialog = useCallback(() => {
+    setCustomQuestion({
+      label: '',
+      question: '',
+      outputVariable: '',
+      responseType: 'text',
+      required: true,
+      hasCondition: false,
+      conditionField: '',
+      conditionOperator: 'equals',
+      conditionValue: '',
+    })
+    setShowCustomDialog(true)
+  }, [])
+
+  // Add custom question from dialog
+  const handleAddCustomQuestion = useCallback(() => {
+    if (!customQuestion.label.trim() || !customQuestion.question.trim()) {
+      toast.error('Please fill in the label and question')
+      return
+    }
+
+    const outputVar = customQuestion.outputVariable.trim() ||
+      customQuestion.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+
+    const newQuestion: AgentQuestion = {
       id: `custom-${Date.now()}`,
       categoryId: 'custom',
-      label: 'New Custom Question',
-      question: 'Enter your question here...',
-      responseType: 'text',
-      outputVariable: 'custom_answer',
-      required: true,
+      label: customQuestion.label.trim(),
+      question: customQuestion.question.trim(),
+      responseType: customQuestion.responseType,
+      outputVariable: outputVar,
+      required: customQuestion.required,
       sortOrder: questions.length,
+      condition: customQuestion.hasCondition ? {
+        field: customQuestion.conditionField,
+        operator: customQuestion.conditionOperator,
+        value: customQuestion.conditionValue,
+      } : undefined,
     }
-    setQuestions((prev) => [...prev, customQuestion])
-    setSelectedQuestion(customQuestion)
-    toast.success('Custom question added - click to edit')
-  }, [questions.length])
+
+    setQuestions((prev) => [...prev, newQuestion])
+    setSelectedQuestion(newQuestion)
+    setShowCustomDialog(false)
+    toast.success(`Added: ${newQuestion.label}`)
+  }, [customQuestion, questions.length])
 
   const handleSave = async () => {
     if (!agent) return
@@ -1030,9 +1380,10 @@ export default function PromptBuilderPage() {
             onQuestionsChange={setQuestions}
             onSelectQuestion={setSelectedQuestion}
             selectedQuestionId={selectedQuestion?.id || null}
-            onAddCustomQuestion={addCustomQuestion}
+            onAddCustomQuestion={openCustomQuestionDialog}
             isDraggingFromBank={!!draggedBankQuestion}
             onDropFromBank={handleDropFromBank}
+            onQuestionUpdate={updateQuestion}
           />
         </div>
 
@@ -1052,6 +1403,171 @@ export default function PromptBuilderPage() {
           />
         </div>
       </div>
+
+      {/* Custom Question Dialog */}
+      <Dialog open={showCustomDialog} onOpenChange={setShowCustomDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Custom Question</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Label <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="e.g., Medication Allergies"
+                value={customQuestion.label}
+                onChange={(e) => setCustomQuestion((prev) => ({ ...prev, label: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">A short name for this question</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Question <span className="text-destructive">*</span></Label>
+              <Textarea
+                placeholder="e.g., Do you have any known allergies to medications?"
+                value={customQuestion.question}
+                onChange={(e) => setCustomQuestion((prev) => ({ ...prev, question: e.target.value }))}
+                rows={2}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Variable Name</Label>
+                <Input
+                  placeholder="medication_allergies"
+                  value={customQuestion.outputVariable}
+                  onChange={(e) => setCustomQuestion((prev) => ({
+                    ...prev,
+                    outputVariable: e.target.value.replace(/\s+/g, '_').toLowerCase()
+                  }))}
+                />
+                <p className="text-xs text-muted-foreground">Auto-generated if left empty</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Response Type</Label>
+                <Select
+                  value={customQuestion.responseType}
+                  onValueChange={(value) => setCustomQuestion((prev) => ({
+                    ...prev,
+                    responseType: value as typeof prev.responseType
+                  }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes_no">Yes/No</SelectItem>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="number">Number</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="choice">Choice</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div>
+                <Label>Required</Label>
+                <p className="text-xs text-muted-foreground">Must be answered to complete call</p>
+              </div>
+              <Switch
+                checked={customQuestion.required}
+                onCheckedChange={(required) => setCustomQuestion((prev) => ({ ...prev, required }))}
+              />
+            </div>
+
+            {/* Condition Section */}
+            <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Conditional Display</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Only ask when a condition is met
+                  </p>
+                </div>
+                <Switch
+                  checked={customQuestion.hasCondition}
+                  onCheckedChange={(hasCondition) => setCustomQuestion((prev) => ({ ...prev, hasCondition }))}
+                />
+              </div>
+
+              {customQuestion.hasCondition && (
+                <div className="space-y-3 pt-3 border-t">
+                  <div className="space-y-2">
+                    <Label className="text-xs">If variable</Label>
+                    <Input
+                      placeholder="e.g., insurance_changed"
+                      value={customQuestion.conditionField}
+                      onChange={(e) => setCustomQuestion((prev) => ({
+                        ...prev,
+                        conditionField: e.target.value
+                      }))}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Operator</Label>
+                      <Select
+                        value={customQuestion.conditionOperator}
+                        onValueChange={(value) => setCustomQuestion((prev) => ({
+                          ...prev,
+                          conditionOperator: value as typeof prev.conditionOperator
+                        }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="equals">Equals</SelectItem>
+                          <SelectItem value="not_equals">Not equals</SelectItem>
+                          <SelectItem value="contains">Contains</SelectItem>
+                          <SelectItem value="greater_than">Greater than</SelectItem>
+                          <SelectItem value="less_than">Less than</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Value</Label>
+                      <Input
+                        placeholder="e.g., yes"
+                        value={customQuestion.conditionValue}
+                        onChange={(e) => setCustomQuestion((prev) => ({
+                          ...prev,
+                          conditionValue: e.target.value
+                        }))}
+                      />
+                    </div>
+                  </div>
+
+                  {customQuestion.conditionField && (
+                    <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                      This question will only be asked if{' '}
+                      <code className="bg-background px-1 rounded">{customQuestion.conditionField}</code>{' '}
+                      {customQuestion.conditionOperator.replace('_', ' ')}{' '}
+                      <code className="bg-background px-1 rounded">{customQuestion.conditionValue || '___'}</code>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddCustomQuestion}>
+              Add Question
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
