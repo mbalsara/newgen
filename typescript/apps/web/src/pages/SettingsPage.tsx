@@ -286,6 +286,16 @@ export default function SettingsPage() {
   const isScrollingProgrammatically = useRef(false)
   const activeSectionRef = useRef(activeSection)
 
+  // Helper to preserve scroll position during state updates
+  const preserveScroll = useCallback((fn: () => void) => {
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+    fn()
+    queueMicrotask(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollTop
+      }
+    })
+  }, [])
 
   // Unsaved changes dialog
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
@@ -856,11 +866,13 @@ export default function SettingsPage() {
                     <Select
                       value={field.value}
                       onValueChange={(value) => {
-                        field.onChange(value)
-                        const models = MODELS_BY_PROVIDER[value]
-                        if (models && models.length > 0) {
-                          setValue("model", models[0].id, { shouldDirty: true })
-                        }
+                        preserveScroll(() => {
+                          field.onChange(value)
+                          const models = MODELS_BY_PROVIDER[value]
+                          if (models && models.length > 0) {
+                            setValue("model", models[0].id, { shouldDirty: true })
+                          }
+                        })
                       }}
                     >
                       <SelectTrigger>
@@ -983,7 +995,7 @@ export default function SettingsPage() {
                       ? "border-primary bg-primary/5 shadow-sm"
                       : "border-border hover:border-primary/50"
                   )}
-                  onClick={() => setValue("voiceId", voice.voiceId, { shouldDirty: true })}
+                  onClick={() => preserveScroll(() => setValue("voiceId", voice.voiceId, { shouldDirty: true }))}
                 >
                   <div>
                     <p className="font-medium text-sm">{voice.name}</p>
@@ -1048,7 +1060,7 @@ export default function SettingsPage() {
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background border-input hover:bg-accent hover:text-accent-foreground"
                     )}
-                    onClick={() => setValue("voiceSpeed", preset.value, { shouldDirty: true })}
+                    onClick={() => preserveScroll(() => setValue("voiceSpeed", preset.value, { shouldDirty: true }))}
                   >
                     {preset.label}
                   </button>

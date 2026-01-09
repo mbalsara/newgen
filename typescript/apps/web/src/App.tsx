@@ -13,6 +13,9 @@ import TasksPage from '@/pages/TasksPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ReportsPage from '@/pages/ReportsPage'
 import SettingsPage from '@/pages/SettingsPage'
+import AgentsSummaryPage from '@/pages/AgentsSummaryPage'
+import AgentDetailPage from '@/pages/AgentDetailPage'
+import PromptBuilderPage from '@/pages/PromptBuilderPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { LoginPage } from '@/pages/auth/login'
 
@@ -36,13 +39,15 @@ function App() {
               <Route path="/patient/:id" element={<PatientDetailPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/agents" element={<AgentsSummaryPage />} />
+              <Route path="/agents/:id" element={<AgentDetailPage />} />
+              <Route path="/agents/:id/prompt-builder" element={<PromptBuilderPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 
             {/* Legacy routes (redirect for backwards compatibility) */}
             <Route path="/today" element={<Navigate to="/appointments" replace />} />
             <Route path="/upcoming" element={<Navigate to="/appointments" replace />} />
-            <Route path="/agents" element={<Navigate to="/settings" replace />} />
             <Route path="/queues" element={<Navigate to="/" replace />} />
             <Route path="/home" element={<Navigate to="/" replace />} />
 

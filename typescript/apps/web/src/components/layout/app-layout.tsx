@@ -5,8 +5,8 @@ import { AppSidebar } from './app-sidebar'
 export function AppLayout() {
   const location = useLocation()
 
-  // Tasks, Queues, and Settings pages have their own full-height layout
-  const isFullHeightPage = location.pathname === '/tasks' || location.pathname === '/queues' || location.pathname === '/settings'
+  // Tasks, Queues, Settings, and Agent pages have their own full-height layout
+  const isFullHeightPage = location.pathname === '/tasks' || location.pathname === '/queues' || location.pathname === '/settings' || location.pathname.startsWith('/agents')
 
   return (
     <SidebarProvider className={isFullHeightPage ? 'h-svh max-h-svh' : ''}>

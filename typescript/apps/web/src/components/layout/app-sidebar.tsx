@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   PanelLeft,
+  Bot,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -27,6 +28,7 @@ const navItems = [
   { icon: ListTodo, label: 'Tasks', href: '/tasks' },
   { icon: Calendar, label: 'Appointments', href: '/appointments' },
   { icon: Users, label: 'Patients', href: '/patients' },
+  { icon: Bot, label: 'Agents', href: '/agents' },
   { icon: BarChart3, label: 'Reports', href: '/reports' },
   { icon: Settings, label: 'Settings', href: '/settings' },
 ]
