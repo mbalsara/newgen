@@ -52,6 +52,8 @@ import {
   DEFAULT_QUESTIONS,
   type BankQuestion,
   type AgentQuestion,
+  type QuestionCategory,
+  type QuestionCondition,
 } from '@repo/types'
 
 // ============================================================================
@@ -67,24 +69,24 @@ interface QuestionBankPanelProps {
 function QuestionBankPanel({ onAddQuestion, selectedQuestionIds, onDragStart }: QuestionBankPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<string[]>(
-    DEFAULT_CATEGORIES.map((c) => c.id)
+    DEFAULT_CATEGORIES.map((c: QuestionCategory) => c.id)
   )
 
   const filteredQuestions = useMemo(() => {
     if (!searchQuery) return DEFAULT_QUESTIONS
     const query = searchQuery.toLowerCase()
     return DEFAULT_QUESTIONS.filter(
-      (q) =>
+      (q: BankQuestion) =>
         q.label.toLowerCase().includes(query) ||
         q.question.toLowerCase().includes(query) ||
-        q.tags.some((t) => t.toLowerCase().includes(query))
+        q.tags.some((t: string) => t.toLowerCase().includes(query))
     )
   }, [searchQuery])
 
   const questionsByCategory = useMemo(() => {
     const grouped: Record<string, BankQuestion[]> = {}
     for (const category of DEFAULT_CATEGORIES) {
-      grouped[category.id] = filteredQuestions.filter((q) => q.categoryId === category.id)
+      grouped[category.id] = filteredQuestions.filter((q: BankQuestion) => q.categoryId === category.id)
     }
     return grouped
   }, [filteredQuestions])
@@ -114,7 +116,7 @@ function QuestionBankPanel({ onAddQuestion, selectedQuestionIds, onDragStart }: 
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-2">
-          {DEFAULT_CATEGORIES.map((category) => {
+          {DEFAULT_CATEGORIES.map((category: QuestionCategory) => {
             const questions = questionsByCategory[category.id] || []
             const isExpanded = expandedCategories.includes(category.id)
 
@@ -309,7 +311,7 @@ function BuilderPanel({
   }
 
   const getCategoryColor = (categoryId: string) => {
-    return DEFAULT_CATEGORIES.find((c) => c.id === categoryId)?.color || '#888'
+    return DEFAULT_CATEGORIES.find((c: QuestionCategory) => c.id === categoryId)?.color || '#888'
   }
 
   // Estimate call duration (roughly 30 seconds per question)
@@ -523,7 +525,7 @@ function BuilderPanel({
                             <span className="font-medium">If</span>
                             {question.conditions?.length ? (
                               <span className="truncate">
-                                {question.conditions.map((c, i) => (
+                                {question.conditions.map((c: QuestionCondition, i: number) => (
                                   <span key={i}>
                                     {i > 0 && (
                                       <span className="font-semibold mx-1">
@@ -559,7 +561,7 @@ function BuilderPanel({
                           setConditionDialogQuestion(question)
                           setConditionRows(
                             question.conditions?.length
-                              ? question.conditions.map(c => ({ field: c.field, operator: c.operator, value: String(c.value ?? '') }))
+                              ? question.conditions.map((c: QuestionCondition) => ({ field: c.field, operator: c.operator, value: String(c.value ?? '') }))
                               : question.condition?.field
                                 ? [{ field: question.condition.field, operator: question.condition.operator, value: String(question.condition.value ?? '') }]
                                 : [{ field: '', operator: 'equals', value: '' }]

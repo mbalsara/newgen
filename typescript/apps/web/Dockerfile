@@ -5,17 +5,23 @@ WORKDIR /app
 
 # Stage 1: Install dependencies
 FROM base AS deps
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/database/package.json ./packages/database/
 COPY packages/types/package.json ./packages/types/
-RUN pnpm install --frozen-lockfile --filter @repo/web...
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Build application
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
 COPY . .
+
+# Build types package first
+RUN pnpm --filter @repo/types build
+
+# Then build web
 RUN pnpm --filter @repo/web build
 
 # Stage 3: Production image with nginx
