@@ -1,10 +1,13 @@
-import { pgTable, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer, jsonb, boolean, real } from 'drizzle-orm/pg-core'
 
 // Agent type
 export type AgentType = 'ai' | 'staff'
 
 // Specialty type
 export type AgentSpecialty = 'general' | 'cardiology' | 'dental' | 'dermatology' | 'gastroenterology' | 'ophthalmology' | 'orthopedics' | 'pediatrics' | 'surgery' | 'other'
+
+// Model provider type
+export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'together-ai' | 'custom-llm'
 
 // Objective category
 export type ObjectiveCategory = 'general' | 'demographics' | 'insurance' | 'pharmacy' | 'financial' | 'pre-visit' | 'custom'
@@ -60,6 +63,14 @@ export const agents = pgTable('agents', {
   // Voice configuration (AI agents only)
   voiceId: text('voice_id'),           // ElevenLabs voice ID
   voiceProvider: text('voice_provider').default('11labs'),
+  voiceSpeed: real('voice_speed').default(0.9), // Voice speed (0.5-2.0, default 0.9)
+
+  // Model configuration
+  model: text('model').default('gpt-4o-mini'), // LLM model ID
+  modelProvider: text('model_provider').$type<ModelProvider>().default('openai'),
+
+  // Call behavior
+  waitForGreeting: boolean('wait_for_greeting').default(true), // Wait for patient to say hello first
 
   // Greeting & Prompt
   greeting: text('greeting'),          // First message template with {{variables}}

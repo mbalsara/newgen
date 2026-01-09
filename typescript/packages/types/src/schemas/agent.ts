@@ -19,6 +19,17 @@ export const AgentSpecialtySchema = z.enum([
 ])
 export type AgentSpecialty = z.infer<typeof AgentSpecialtySchema>
 
+// Model provider enum
+export const ModelProviderSchema = z.enum([
+  'openai',
+  'anthropic',
+  'google',
+  'groq',
+  'together-ai',
+  'custom-llm',
+])
+export type ModelProvider = z.infer<typeof ModelProviderSchema>
+
 // Objective category enum
 export const ObjectiveCategorySchema = z.enum([
   'general',
@@ -85,6 +96,14 @@ export const AgentSchema = z.object({
   // Voice configuration
   voiceId: z.string().nullable(),
   voiceProvider: z.string().nullable().default('11labs'),
+  voiceSpeed: z.number().min(0.5).max(2.0).default(0.9),
+
+  // Model configuration
+  model: z.string().default('gpt-4o-mini'),
+  modelProvider: ModelProviderSchema.default('openai'),
+
+  // Call behavior
+  waitForGreeting: z.boolean().default(true),
 
   // Greeting & Prompt
   greeting: z.string().nullable(),
@@ -122,6 +141,10 @@ export const NewAgentSchema = AgentSchema.omit({
 }).partial({
   voiceId: true,
   voiceProvider: true,
+  voiceSpeed: true,
+  model: true,
+  modelProvider: true,
+  waitForGreeting: true,
   greeting: true,
   systemPrompt: true,
   specialty: true,
