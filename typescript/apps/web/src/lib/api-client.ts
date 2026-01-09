@@ -38,8 +38,35 @@ export type {
   TranscriptMessage,
 }
 
-// API base URL (proxied through Vite or directly to backend)
-const API_BASE = '/api'
+// Extend Window interface for runtime env config
+declare global {
+  interface Window {
+    __ENV__?: {
+      VITE_API_URL?: string
+      VITE_VAPI_PUBLIC_KEY?: string
+    }
+  }
+}
+
+// Get API base URL from runtime env config, env vars, or default to '/api' (works with Vite proxy)
+function getApiBase(): string {
+  // First check runtime env config (for Docker/production)
+  if (typeof window !== 'undefined' && window.__ENV__?.VITE_API_URL) {
+    const url = window.__ENV__.VITE_API_URL
+    // Skip placeholder values
+    if (url && !url.startsWith('__')) {
+      return url
+    }
+  }
+  // Then check Vite env vars (for development)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  // Default to relative path (works with Vite proxy in dev)
+  return '/api'
+}
+
+const API_BASE = getApiBase()
 
 // Generic fetch wrapper with error handling
 async function fetchAPI<T>(
