@@ -48,8 +48,11 @@ declare global {
   }
 }
 
-// Get API base URL from runtime env config, env vars, or default to '/api' (works with Vite proxy)
-function getApiBase(): string {
+// API version prefix - change this to '/api/v2' when needed
+const API_PREFIX = '/api'
+
+// Get API host from runtime env config, env vars, or default to '' (works with Vite proxy)
+function getApiHost(): string {
   // First check runtime env config (for Docker/production)
   if (typeof window !== 'undefined' && window.__ENV__?.VITE_API_URL) {
     const url = window.__ENV__.VITE_API_URL
@@ -62,11 +65,12 @@ function getApiBase(): string {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }
-  // Default to relative path (works with Vite proxy in dev)
-  return '/api'
+  // Default to empty (relative path, works with Vite proxy in dev)
+  return ''
 }
 
-const API_BASE = getApiBase()
+const API_HOST = getApiHost()
+const API_BASE = `${API_HOST}${API_PREFIX}`
 
 // Generic fetch wrapper with error handling
 async function fetchAPI<T>(

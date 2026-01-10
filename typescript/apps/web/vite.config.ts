@@ -13,6 +13,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Fallback proxy if VITE_API_URL is not set
       '/api': {
         target: 'http://localhost:5174',
         changeOrigin: true,
