@@ -28,10 +28,10 @@ const MODEL_CONFIG = {
 }
 
 /**
- * Create the Trika PFT Squad with scheduling capability
+ * Create the Erica Brown PFT Squad with scheduling capability
  */
-export async function createTrikaPftSquad(): Promise<{ squadId: string; assistantIds: { primary: string; scheduler: string } }> {
-  console.log('[SquadManager] Creating Trika PFT Squad...')
+export async function createEricaBrownPftSquad(): Promise<{ squadId: string; assistantIds: { primary: string; scheduler: string } }> {
+  console.log('[SquadManager] Creating Erica Brown PFT Squad...')
 
   // First, create the Scheduling Assistant
   const schedulerAssistant = await vapiClient.assistants.create({
@@ -154,6 +154,31 @@ If patient says "actually, I'll keep my current appointment":
             url: `${WEBHOOK_BASE_URL}/api/scheduling/request-callback`,
           },
         },
+        {
+          type: 'transferCall',
+          function: {
+            name: 'transfer_back_to_followup',
+            description: 'Transfer back to Erica Brown after appointment is booked, callback scheduled, or patient decides to keep their original appointment.',
+            parameters: {
+              type: 'object',
+              properties: {
+                outcome: {
+                  type: 'string',
+                  enum: ['booked', 'callback_requested', 'kept_original'],
+                  description: 'What happened with the scheduling',
+                },
+              },
+            },
+          },
+          destinations: [
+            {
+              type: 'assistant',
+              assistantName: 'Erica Brown PFT',
+              message: '', // Silent transfer
+              description: 'Transfer back to continue follow-up questions',
+            },
+          ],
+        },
       ],
     },
     firstMessageMode: 'assistant-speaks-first',
@@ -162,16 +187,16 @@ If patient says "actually, I'll keep my current appointment":
 
   console.log(`[SquadManager] Created Scheduling Assistant: ${schedulerAssistant.id}`)
 
-  // Create the primary Trika PFT Assistant
+  // Create the primary Erica Brown PFT Assistant
   const primaryAssistant = await vapiClient.assistants.create({
-    name: 'Trika PFT',
+    name: 'Erica Brown PFT',
     voice: VOICE_CONFIG,
     model: {
       ...MODEL_CONFIG,
       messages: [
         {
           role: 'system',
-          content: `You are Trika, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
+          content: `You are Erica Brown, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
 
 ## HOW TO SOUND HUMAN
 - Be conversational, warm, and natural - like a real person, not a script
@@ -180,14 +205,14 @@ If patient says "actually, I'll keep my current appointment":
 - Match their pace - if they're chatty, engage; if brief, be brief
 
 ## VOICEMAIL
-If you reach voicemail, wait for the beep then say: "Hi, this is Trika from Dr. Sahai's office checking in after your breathing test. Please call us at 555-TRIKA-MD. Thanks!" Then hang up.
+If you reach voicemail, wait for the beep then say: "Hi, this is Erica from Dr. Sahai's office checking in after your breathing test. Please call us at the office. Thanks!" Then hang up.
 
 ## CALL FLOW
 
 **1. INTRO**
 "Hi, is this {{patient_name}}?"
 [Wait]
-"This is Trika from Dr. Sahai's office - just checking in after your breathing test yesterday. Got a minute? This call is recorded."
+"This is Erica Brown from Dr. Sahai's office - just checking in after your breathing test yesterday. Got a minute? This call is recorded."
 
 **2. HOW ARE YOU?**
 "How are you feeling? Any changes since the test?"
@@ -226,7 +251,34 @@ If the conversation context shows scheduling was just completed:
 
 ## KEY RULES
 - NEVER ask a question the patient already answered
-- Sound like a helpful human, not a checklist`,
+- Sound like a helpful human, not a checklist
+- If patient wants to reschedule, use transfer_to_scheduler tool`,
+        },
+      ],
+      tools: [
+        {
+          type: 'transferCall',
+          function: {
+            name: 'transfer_to_scheduler',
+            description: 'Transfer to the scheduling assistant when the patient wants to reschedule, change their appointment, come in sooner, or says they cannot make their current appointment.',
+            parameters: {
+              type: 'object',
+              properties: {
+                reason: {
+                  type: 'string',
+                  description: 'Why the patient wants to reschedule',
+                },
+              },
+            },
+          },
+          destinations: [
+            {
+              type: 'assistant',
+              assistantName: 'Scheduling Assistant',
+              message: '', // Silent transfer
+              description: 'Scheduling assistant for rescheduling appointments',
+            },
+          ],
         },
       ],
     },
@@ -239,7 +291,7 @@ If the conversation context shows scheduling was just completed:
 
   // Create the Squad with both assistants
   const squad = await vapiClient.squads.create({
-    name: 'trika-pft-squad',
+    name: 'erica-brown-pft-squad',
     members: [
       {
         assistantId: primaryAssistant.id,
@@ -257,7 +309,7 @@ If the conversation context shows scheduling was just completed:
         assistantDestinations: [
           {
             type: 'assistant',
-            assistantName: 'Trika PFT',
+            assistantName: 'Erica Brown PFT',
             message: '', // Silent transfer
             description: 'Transfer back after scheduling is complete',
           },
@@ -311,14 +363,14 @@ export async function startSquadCall(params: {
 }
 
 /**
- * Get or create the Trika PFT Squad
+ * Get or create the Erica Brown PFT Squad
  * Returns existing squad if found, creates new one if not
  */
-export async function getOrCreateTrikaPftSquad(): Promise<string> {
+export async function getOrCreateEricaBrownPftSquad(): Promise<string> {
   try {
     // Try to find existing squad
     const squads = await vapiClient.squads.list()
-    const existingSquad = squads.find((s: { name?: string }) => s.name === 'trika-pft-squad')
+    const existingSquad = squads.find((s: { name?: string }) => s.name === 'erica-brown-pft-squad')
 
     if (existingSquad) {
       console.log(`[SquadManager] Found existing squad: ${existingSquad.id}`)
@@ -326,7 +378,7 @@ export async function getOrCreateTrikaPftSquad(): Promise<string> {
     }
 
     // Create new squad
-    const result = await createTrikaPftSquad()
+    const result = await createEricaBrownPftSquad()
     return result.squadId
   } catch (error) {
     console.error('[SquadManager] Error getting/creating squad:', error)
