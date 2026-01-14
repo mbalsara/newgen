@@ -111,6 +111,14 @@ export const taskService = {
   async addCallEvent(id: number, callData: {
     endedReason: string
     transcript?: string
+    messages?: Array<{ speaker: string; text: string; time: string }>
+    recordingUrl?: string
+    analysis?: {
+      summary?: string
+      structuredData?: Record<string, unknown>
+      successEvaluation?: string
+    }
+    summary?: string
   }): Promise<Task | undefined> {
     const callEvent: TimelineEvent = {
       id: generateEventId('call'),
@@ -119,6 +127,10 @@ export const taskService = {
       title: 'Outbound Call',
       endedReason: callData.endedReason,
       transcript: callData.transcript,
+      messages: callData.messages,
+      recordingUrl: callData.recordingUrl,
+      analysis: callData.analysis,
+      summary: callData.summary,
     }
 
     return taskRepository.addTimelineEvent(id, callEvent)

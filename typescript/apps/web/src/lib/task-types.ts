@@ -155,11 +155,22 @@ export interface NoteEvent extends BaseTimelineEvent {
   content: string
 }
 
+// Call analysis from VAPI
+export interface CallAnalysis {
+  summary?: string
+  structuredData?: Record<string, unknown>
+  successEvaluation?: string
+}
+
 // Call event (outbound demo call)
 export interface CallEvent extends BaseTimelineEvent {
   type: 'call'
   endedReason: string
   transcript?: string
+  messages?: TranscriptMessage[]
+  recordingUrl?: string
+  analysis?: CallAnalysis
+  summary?: string
 }
 
 // Union type for all timeline events

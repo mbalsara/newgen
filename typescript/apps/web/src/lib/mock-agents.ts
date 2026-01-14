@@ -39,6 +39,14 @@ export const aiAgents: AIVoiceAgent[] = [
     avatar: '🤖',
     vapiAssistantId: 'aa162312-8a2c-46c1-922e-e3cb65f802c8'
   },
+  {
+    id: 'ai-trika-pft',
+    name: 'Trika',
+    type: 'ai',
+    role: 'PFT Follow-up',
+    avatar: '🤖',
+    vapiAssistantId: '306c5a82-9c92-4049-8adb-9f22546e4910'
+  },
 ]
 
 // Staff Members

@@ -287,26 +287,29 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone Number</label>
-              <Input
-                type="tel"
-                placeholder="+1 (555) 123-4567"
-                value={phoneNumber}
-                onChange={e => setPhoneNumber(e.target.value)}
-                className="text-center text-lg"
-              />
-            </div>
+            <form onSubmit={(e) => { e.preventDefault(); startCall(); }} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Phone Number</label>
+                <Input
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={phoneNumber}
+                  onChange={e => setPhoneNumber(e.target.value)}
+                  className="text-center text-lg"
+                  autoFocus
+                />
+              </div>
 
-            <Button
-              onClick={startCall}
-              className="w-full bg-green-600 hover:bg-green-700"
-              size="lg"
-              disabled={!agent?.vapiAssistantId}
-            >
-              <Phone className="h-5 w-5 mr-2" />
-              Start Demo Call
-            </Button>
+              <Button
+                type="submit"
+                className="w-full bg-green-600 hover:bg-green-700"
+                size="lg"
+                disabled={!agent?.vapiAssistantId}
+              >
+                <Phone className="h-5 w-5 mr-2" />
+                Start Demo Call
+              </Button>
+            </form>
           </div>
         </div>
       </div>

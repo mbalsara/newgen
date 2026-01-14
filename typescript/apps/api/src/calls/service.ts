@@ -49,8 +49,8 @@ export const callService = {
       patientContext: params.patientContext,
     })
 
-    // Build VAPI assistant overrides
-    const assistantOverrides = buildAssistantOverrides(promptConfig)
+    // Build VAPI assistant overrides (pass agent for model provider info)
+    const assistantOverrides = buildAssistantOverrides(promptConfig, agent)
 
     // Start the VAPI call with runtime overrides
     const vapiResult = await vapiApi.startCall({
@@ -83,6 +83,7 @@ export const callService = {
     endedReason?: string
     messages: TranscriptMessage[]
     hasAbusiveLanguage: boolean
+    recordingUrl?: string
   } | null> {
     // Fetch from VAPI
     const vapiStatus = await vapiApi.getCallStatus(callId)
@@ -103,6 +104,7 @@ export const callService = {
     // Parse messages
     const messages = parseVapiMessages(vapiStatus)
     const hasAbusiveLanguage = detectAbusiveLanguage(messages)
+    const recordingUrl = vapiStatus.artifact?.recordingUrl || vapiStatus.recordingUrl
 
     // Update local record
     await callRepository.update(callId, {
@@ -111,6 +113,7 @@ export const callService = {
       messages,
       hasAbusiveLanguage,
       transcript: vapiStatus.artifact?.transcript || vapiStatus.transcript,
+      recordingUrl,
     })
 
     return {
@@ -118,6 +121,7 @@ export const callService = {
       endedReason: vapiStatus.endedReason,
       messages,
       hasAbusiveLanguage,
+      recordingUrl,
     }
   },
 
@@ -139,8 +143,61 @@ export const callService = {
     action: 'completed' | 'escalated' | 'flagged' | 'retry_scheduled' | 'voicemail'
     message: string
   } | null> {
-    const call = await callRepository.findById(callId)
+    let call = await callRepository.findById(callId)
     if (!call || !call.taskId) return null
+
+    // Always fetch latest call data from VAPI to get recording, transcript, and analysis
+    console.log('[CALL] Fetching latest data from VAPI for call:', callId)
+    let vapiCall = await vapiApi.getCallStatus(callId)
+    console.log('[CALL] VAPI response:', JSON.stringify({
+      status: vapiCall?.status,
+      hasRecordingUrl: !!vapiCall?.recordingUrl,
+      hasStereoRecordingUrl: !!vapiCall?.stereoRecordingUrl,
+      hasArtifactRecordingUrl: !!vapiCall?.artifact?.recordingUrl,
+      hasTranscript: !!vapiCall?.transcript,
+      hasArtifactTranscript: !!vapiCall?.artifact?.transcript,
+      hasAnalysis: !!vapiCall?.analysis,
+      analysis: vapiCall?.analysis,
+      summary: vapiCall?.summary,
+    }))
+
+    // Retry loop - wait for recording AND analysis (VAPI generates analysis async)
+    let retries = 0
+    const maxRetries = 8
+    const hasRecording = () => vapiCall?.artifact?.recordingUrl || vapiCall?.recordingUrl || vapiCall?.stereoRecordingUrl
+    const hasAnalysis = () => vapiCall?.analysis?.structuredData && Object.keys(vapiCall.analysis.structuredData).length > 0
+
+    while (retries < maxRetries && vapiCall && (!hasRecording() || !hasAnalysis())) {
+      console.log('[CALL] Waiting for data, retry:', retries + 1, '- hasRecording:', !!hasRecording(), 'hasAnalysis:', !!hasAnalysis())
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      vapiCall = await vapiApi.getCallStatus(callId)
+      console.log('[CALL] VAPI retry response:', JSON.stringify({
+        hasRecordingUrl: !!vapiCall?.recordingUrl,
+        hasArtifactRecordingUrl: !!vapiCall?.artifact?.recordingUrl,
+        hasAnalysis: !!vapiCall?.analysis?.structuredData,
+      }))
+      retries++
+    }
+
+    if (vapiCall) {
+      const messages = parseVapiMessages(vapiCall)
+      // Try multiple sources for recording URL
+      const recordingUrl = vapiCall.artifact?.recordingUrl || vapiCall.recordingUrl || vapiCall.stereoRecordingUrl
+      console.log('[CALL] Final recording URL:', recordingUrl)
+      console.log('[CALL] Final analysis:', JSON.stringify(vapiCall.analysis))
+      console.log('[CALL] Final summary:', vapiCall.summary || vapiCall.analysis?.summary)
+
+      await callRepository.update(callId, {
+        messages,
+        transcript: vapiCall.artifact?.transcript || vapiCall.transcript,
+        recordingUrl,
+        analysis: vapiCall.analysis,
+        summary: vapiCall.summary || vapiCall.analysis?.summary,
+      })
+      // Re-fetch the updated call
+      call = await callRepository.findById(callId)
+      if (!call) return null
+    }
 
     const task = await taskService.getTaskById(call.taskId)
     if (!task) return null
@@ -153,10 +210,24 @@ export const callService = {
       ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
       : 0
 
-    // Add call event to task timeline
+    // Add call event to task timeline with transcript and recording
+    console.log('[CALL] Adding call event to task timeline:', {
+      taskId: call.taskId,
+      endedReason: call.endedReason,
+      hasTranscript: !!call.transcript,
+      messageCount: call.messages?.length || 0,
+      hasRecordingUrl: !!call.recordingUrl,
+      hasAnalysis: !!(call as any).analysis,
+      hasSummary: !!(call as any).summary,
+    })
+
     await taskService.addCallEvent(call.taskId, {
       endedReason: call.endedReason || 'unknown',
       transcript: call.transcript ?? undefined,
+      messages: call.messages ?? undefined,
+      recordingUrl: call.recordingUrl ?? undefined,
+      analysis: (call as any).analysis ?? undefined,
+      summary: (call as any).summary ?? undefined,
     })
 
     // Check for abusive language
@@ -343,6 +414,27 @@ export const callService = {
           endedReason: event.call?.endedReason,
           endedAt: new Date(),
         })
+
+        // Fetch latest call data from VAPI (includes transcript and recording URL)
+        // Note: VAPI may need some time to process the recording, so we poll a few times
+        let vapiCall = await vapiApi.getCallStatus(callId)
+        let retries = 0
+        const maxRetries = 3
+        while (retries < maxRetries && vapiCall && !vapiCall.artifact?.recordingUrl) {
+          await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds
+          vapiCall = await vapiApi.getCallStatus(callId)
+          retries++
+        }
+
+        if (vapiCall) {
+          const messages = parseVapiMessages(vapiCall)
+          const recordingUrl = vapiCall.artifact?.recordingUrl || vapiCall.recordingUrl
+          await callRepository.update(callId, {
+            messages,
+            transcript: vapiCall.artifact?.transcript || vapiCall.transcript,
+            recordingUrl,
+          })
+        }
 
         // Check for abusive language
         const call = await callRepository.findById(callId)

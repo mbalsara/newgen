@@ -1,5 +1,6 @@
-import type { Agent, AgentObjective, TaskType } from '@repo/database'
+import type { Agent, AgentObjective, TaskType, AnalysisSchema } from '@repo/database'
 import type { TaskWithPatient } from '../tasks/repository'
+import { Vapi } from '@vapi-ai/server-sdk'
 
 // Template variables for prompt interpolation
 export interface PromptVariables {
@@ -78,6 +79,11 @@ Important guidelines:
 - Keep conversations focused and efficient
 - Respect patient privacy and HIPAA guidelines
 
+When ending the call:
+- Summarize any action items or next steps
+- Say a complete goodbye: "Take care, [patient name]. Goodbye!"
+- Wait for the patient to say goodbye before ending
+
 If you reach voicemail:
 1. Leave a brief message: "Hi, this is {{agent_name}} from {{practice_name}} calling for {{patient_name}}. Please call us back at {{practice_phone}}. Thank you!"
 2. End the call after leaving the message.`
@@ -104,8 +110,8 @@ function filterObjectives(
     if (obj.taskTypes && taskType && !obj.taskTypes.includes(taskType)) {
       return false
     }
-    // Check specialty filter
-    if (obj.specialties && specialty && !obj.specialties.includes(specialty)) {
+    // Check specialty filter - cast to check if specialty is in the array
+    if (obj.specialties && specialty && !obj.specialties.includes(specialty as typeof obj.specialties[number])) {
       return false
     }
     return true
@@ -217,45 +223,75 @@ export function buildCallPrompt(params: {
 }
 
 // Build VAPI assistant overrides from prompt config
-export function buildAssistantOverrides(promptConfig: PromptConfig): {
-  voice?: { voiceId: string; provider: string }
-  firstMessage: string
-  model?: {
-    messages: Array<{ role: string; content: string }>
-  }
-  variableValues: Record<string, string>
-} {
-  const overrides: {
-    voice?: { voiceId: string; provider: string }
-    firstMessage: string
-    model?: {
-      messages: Array<{ role: string; content: string }>
-    }
-    variableValues: Record<string, string>
-  } = {
+// Returns Vapi.AssistantOverrides for type safety with the SDK
+export function buildAssistantOverrides(promptConfig: PromptConfig, agent?: Agent): Vapi.AssistantOverrides {
+  const overrides: Vapi.AssistantOverrides = {
     firstMessage: promptConfig.firstMessage,
-    variableValues: promptConfig.variableValues as Record<string, string>,
+    // Wait for patient to answer before speaking
+    firstMessageMode: agent?.waitForGreeting ? 'assistant-waits-for-user' : 'assistant-speaks-first',
+    variableValues: promptConfig.variableValues as Record<string, unknown>,
   }
 
-  // Add voice config if voiceId is set
+  // Add voice config with stability settings to fix volume/excitement variation
   if (promptConfig.voice.voiceId) {
+    // Use ElevenLabs voice configuration
     overrides.voice = {
+      provider: '11labs',
       voiceId: promptConfig.voice.voiceId,
-      provider: promptConfig.voice.provider,
-    }
+      // Fix: Higher stability = more consistent voice, less variation/excitement
+      stability: 0.75,
+      // Fix: Similarity boost for voice consistency
+      similarityBoost: 0.75,
+      // Voice speed from agent config
+      speed: agent?.voiceSpeed || 1.0,
+    } as Vapi.AssistantOverridesVoice
   }
 
-  // Add system prompt as model messages
+  // Add system prompt as model messages (must include provider and model for VAPI)
   if (promptConfig.systemPrompt) {
     overrides.model = {
+      provider: (agent?.modelProvider || 'openai') as 'openai',
+      model: agent?.model || 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
           content: promptConfig.systemPrompt,
         },
       ],
+    } as Vapi.AssistantOverridesModel
+  }
+
+  // Add analysis plan for structured data extraction
+  const analysisSchema = agent?.analysisSchema
+
+  const analysisPlan: Vapi.AnalysisPlan = {
+    summaryPlan: {
+      enabled: true,
+    },
+    successEvaluationPlan: {
+      enabled: true,
+      rubric: 'PassFail',
+    },
+  }
+
+  // Add structured data plan only if agent has a schema configured
+  if (analysisSchema) {
+    analysisPlan.structuredDataPlan = {
+      enabled: true,
+      schema: analysisSchema as Vapi.JsonSchema,
     }
   }
+
+  overrides.analysisPlan = analysisPlan
+
+  // Add start speaking plan to reduce response delay
+  overrides.startSpeakingPlan = {
+    // Wait for silence before starting to speak
+    waitSeconds: 0.5,
+  }
+
+  // Ensure complete goodbye message when ending call
+  overrides.endCallMessage = "Thank you for your time. Take care and have a great day. Goodbye!"
 
   return overrides
 }

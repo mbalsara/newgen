@@ -15,7 +15,7 @@ config({ path: resolve(__dirname, '../../../apps/api/.env.local') })
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { agents, type NewAgent, type EventHandling, type AgentObjective } from './schema/agents'
+import { agents, type NewAgent, type EventHandling, type AgentObjective, type AnalysisSchema } from './schema/agents'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
@@ -322,6 +322,136 @@ If you hear ANY of these, you have reached voicemail:
         'Patient has health concerns to discuss',
       ],
     },
+  },
+  {
+    id: 'ai-trika-pft',
+    name: 'Trika',
+    type: 'ai',
+    role: 'PFT Follow-up',
+    avatar: '🤖',
+    vapiAssistantId: '306c5a82-9c92-4049-8adb-9f22546e4910', // Using Luna's VAPI assistant (overrides applied at call time)
+    voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel
+    voiceProvider: '11labs',
+    voiceSpeed: 0.9,
+    model: 'gpt-4o-mini',
+    modelProvider: 'openai',
+    waitForGreeting: true,
+    greeting: "Hi, is this {{patient_name}}?",
+    systemPrompt: `You are {{agent_name}}, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
+
+## HOW TO SOUND HUMAN
+- Be conversational, warm, and natural - like a real person, not a script
+- Use brief acknowledgments: "Got it", "Okay", "I see", "Alright"
+- LISTEN to what the patient says - don't ask questions they've already answered
+- If they give a long answer, don't just say "Got it" - show you heard them: "I see, so the cough comes and goes"
+- Match their pace - if they're chatty, engage; if brief, be brief
+
+## VOICEMAIL
+If you reach voicemail, wait for the beep then say: "Hi, this is {{agent_name}} from Dr. Sahai's office checking in after your breathing test. Please call us at {{practice_phone}}. Thanks!" Then hang up.
+
+## CALL FLOW
+
+**1. INTRO**
+"Hi, is this {{patient_name}}?"
+[Wait]
+"This is {{agent_name}} from Dr. Sahai's office - just checking in after your breathing test yesterday. Got a minute? This call is recorded."
+
+**2. HOW ARE YOU?**
+"How are you feeling? Any changes since the test?"
+
+LISTEN CAREFULLY to their response:
+- If they say "good/fine/same" → Say "Great!" and go straight to medications
+- If they mention ANY symptom (cough, breathing issues, wheezing, chest tightness, etc.) → Have a natural conversation about it
+
+**IMPORTANT: Don't ask redundant questions!**
+- If they say "I can hear myself breathing" - that IS noisy/wheezing. Don't ask "any wheezing?"
+- If they mention shortness of breath - don't ask about it again
+- If they describe their cough in detail - acknowledge it, don't ask "any change in cough?"
+
+When they mention symptoms, respond naturally:
+- "I see, so the cough is still there, comes and goes..."
+- "Okay, and you mentioned hearing yourself breathe - like a wheeze?"
+- Only ask about symptoms they HAVEN'T mentioned
+
+After discussing symptoms: "Would you like to come in sooner than your scheduled appointment?"
+- If yes: "I'll have the front desk call you to reschedule."
+- If no: "Okay, no problem."
+
+**3. MEDICATIONS**
+"Quick question - how many times have you used your rescue inhaler since the test?"
+[Wait, then: "Okay" or "Got it"]
+
+"And your other medications - been taking those?"
+[If yes: "Good"]
+
+**4. WRAP UP**
+"Alright, that's everything. We'll see you at your follow-up to go over the results. Take care!"
+
+## KEY RULES
+- NEVER ask a question the patient already answered
+- NEVER repeat the same question in different words
+- If unsure whether they answered something, summarize what you heard and ask if there's anything else
+- Sound like a helpful human, not a checklist`,
+    specialty: 'pulmonology',
+    objectives: [
+      { id: 'pft-consent', category: 'consent', text: 'Obtain recording consent', required: true, taskTypes: ['post-visit'] },
+      { id: 'pft-symptoms', category: 'clinical', text: 'Check for any change in symptoms', required: true, taskTypes: ['post-visit'] },
+      { id: 'pft-cough', category: 'clinical', text: 'Any change in cough?', required: false, taskTypes: ['post-visit'] },
+      { id: 'pft-sob', category: 'clinical', text: 'Any change in shortness of breath?', required: false, taskTypes: ['post-visit'] },
+      { id: 'pft-noisy', category: 'clinical', text: 'Any noisy breathing?', required: false, taskTypes: ['post-visit'] },
+      { id: 'pft-reschedule', category: 'scheduling', text: 'Does patient want earlier appointment?', required: false, taskTypes: ['post-visit'] },
+      { id: 'pft-inhaler', category: 'medications', text: 'How many times was rescue inhaler used?', required: true, taskTypes: ['post-visit'] },
+      { id: 'pft-compliance', category: 'medications', text: 'Is patient taking their medicines?', required: true, taskTypes: ['post-visit'] },
+    ] as AgentObjective[],
+    practiceName: 'Trika Medical',
+    practicePhone: '555-TRIKA-MD',
+    maxRetries: 3,
+    retryDelayMinutes: 120,
+    eventHandling: {
+      ...defaultEventHandling,
+      successCriteria: [
+        'Recording consent obtained',
+        'Symptom status collected',
+        'Medication compliance confirmed',
+        'Inhaler usage recorded',
+        'Voicemail message left successfully',
+      ],
+      escalationCriteria: [
+        'Patient reports worsening symptoms',
+        'Patient wants earlier appointment',
+        'Patient not taking medications',
+        'Patient requests human assistance',
+        'Patient uses abusive language',
+      ],
+    },
+    // Analysis schema for structured data extraction from calls
+    analysisSchema: {
+      type: 'object',
+      properties: {
+        recording_consent: { type: 'boolean', description: 'Did patient consent to call recording' },
+        symptom_changes: { type: 'string', description: 'Any changes in respiratory symptoms since last visit' },
+        cough_status: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Current cough status'
+        },
+        shortness_of_breath: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Shortness of breath status'
+        },
+        noisy_breathing: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Wheezing or noisy breathing status'
+        },
+        rescue_inhaler_count: { type: 'number', description: 'Times rescue inhaler used since test' },
+        medication_compliant: { type: 'boolean', description: 'Is patient taking medications as prescribed' },
+        wants_reschedule: { type: 'boolean', description: 'Does patient want to reschedule to come in sooner' },
+        patient_concerns: { type: 'string', description: 'Any additional concerns or questions from patient' },
+      },
+      required: ['recording_consent', 'symptom_changes', 'rescue_inhaler_count', 'medication_compliant'],
+    } as any,
   },
 ]
 

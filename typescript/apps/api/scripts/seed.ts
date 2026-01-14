@@ -3,6 +3,16 @@
  * Run with: npx tsx scripts/seed.ts
  */
 
+import { config } from 'dotenv'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Load env from api folder
+config({ path: resolve(__dirname, '../.env.local') })
+
 import { db, agents, patients, tasks, flagReasonToIndex } from '@repo/database'
 import type { NewAgent, NewPatient, NewTask } from '@repo/database'
 
@@ -70,6 +80,8 @@ const samplePatients: NewPatient[] = [
   { id: 'PT-3847', name: 'Robert Taylor', phone: '(555) 567-8901', dob: '02/28/1958' },
   { id: 'PT-4123', name: 'Linda Martinez', phone: '(555) 678-9012', dob: '04/12/1982' },
   { id: 'PT-5234', name: 'David Kim', phone: '(555) 789-0123', dob: '08/25/1975' },
+  // PFT Follow-up test patient
+  { id: 'PT-PFT-001', name: 'Margaret Thompson', phone: '(555) 111-2222', dob: '06/20/1962' },
 ]
 
 // Sample tasks (references patient IDs)
@@ -301,12 +313,38 @@ const sampleTasks: NewTask[] = [
       },
     ],
   },
+  // PFT Follow-up Test Task (Pulmonology Post-Visit)
+  {
+    patientId: 'PT-PFT-001',
+    provider: 'Dr. Sahai',
+    type: 'post-visit',
+    status: 'pending',
+    assignedAgentId: 'ai-trika-pft',
+    time: '1h ago',
+    unread: true,
+    description: 'PFT follow-up call - breathing test completed Jan 12',
+    ehrSync: { status: 'pending', lastSync: null },
+    timeline: [
+      {
+        id: 'created-pft-1',
+        type: 'created',
+        timestamp: 'Jan 13, 9:00 AM',
+        title: 'Task Created',
+        description: 'PFT follow-up call for Margaret Thompson. Breathing test completed Jan 12. Follow-up appointment scheduled Jan 19.',
+      },
+    ],
+  },
 ]
 
 async function seed() {
   console.log('🌱 Starting database seed...')
 
   try {
+    // Clear existing tasks first (they have auto-generated IDs)
+    console.log('🗑️  Clearing existing tasks...')
+    await db.delete(tasks)
+    console.log('   ✓ Tasks cleared')
+
     // Seed agents first
     console.log('📝 Seeding agents...')
     const allAgents = [...aiAgents, ...staffMembers]

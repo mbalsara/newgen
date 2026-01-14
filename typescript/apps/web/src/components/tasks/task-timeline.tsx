@@ -2,6 +2,7 @@ import {
   Plus,
   Mic,
   ArrowRight,
+  Phone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TimelineEvent, Task } from '@/lib/task-types'
@@ -9,6 +10,7 @@ import { VoiceEventCard } from './timeline-events/voice-event'
 import { ObjectivesEventCard } from './timeline-events/objectives-event'
 import { NextStepsEventCard } from './timeline-events/next-steps-event'
 import { BalanceEventCard } from './timeline-events/balance-event'
+import { CallEventCard } from './timeline-events/call-event'
 
 interface TaskTimelineProps {
   task: Task
@@ -17,6 +19,7 @@ interface TaskTimelineProps {
 const eventIcons: Record<string, { icon: React.ElementType; bg: string; text: string }> = {
   created: { icon: Plus, bg: 'bg-gray-200 dark:bg-gray-700', text: 'text-gray-600 dark:text-gray-300' },
   voice: { icon: Mic, bg: 'bg-gray-800 dark:bg-gray-200', text: 'text-white dark:text-gray-900' },
+  call: { icon: Phone, bg: 'bg-blue-500', text: 'text-white' },
   'next-steps': { icon: ArrowRight, bg: 'bg-gray-200 dark:bg-gray-700', text: 'text-gray-600 dark:text-gray-300' },
 }
 
@@ -39,7 +42,7 @@ function TimelineEventItem({ event, task }: TimelineEventItemProps) {
   const iconConfig = eventIcons[event.type] || eventIcons.created
 
   // Some events don't need the icon column
-  const showIcon = ['created', 'voice', 'next-steps'].includes(event.type)
+  const showIcon = ['created', 'voice', 'call', 'next-steps'].includes(event.type)
 
   return (
     <div className="flex gap-4">
@@ -84,6 +87,9 @@ function EventContent({ event, task }: EventContentProps) {
 
     case 'voice':
       return <VoiceEventCard event={event} />
+
+    case 'call':
+      return <CallEventCard event={event} />
 
     case 'scheduled':
       return (

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useLocation, Link } from 'react-router'
+import { useLocation, useParams, useNavigate, Link } from 'react-router'
 import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown, Plus, Mic, AlertTriangle, ArrowRight, X, Pencil, Phone, StickyNote } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTasks } from '@/contexts/tasks-context'
 import { getAgent, aiAgents, staffMembers } from '@/lib/mock-agents'
 import { cn } from '@/lib/utils'
-import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, TaskFilters, TaskStatus, PatientFlagReason } from '@/lib/task-types'
+import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, CallEvent, TaskFilters, TaskStatus, PatientFlagReason } from '@/lib/task-types'
 import { OutboundCallPanel } from '@/components/tasks/outbound-call-panel'
 import { PatientFlagModal } from '@/components/patients/patient-flag-modal'
 
@@ -37,6 +37,8 @@ const statusLabels: Record<string, string> = {
 
 export default function TasksPage() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { taskId: taskIdParam } = useParams<{ taskId?: string }>()
   const {
     tasks,
     filters,
@@ -54,31 +56,50 @@ export default function TasksPage() {
     markTaskDone,
     reopenTask,
     toggleNextStep,
+    loading,
   } = useTasks()
 
   const [expandedTranscripts, setExpandedTranscripts] = useState<Record<string, boolean>>({})
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
 
+  // Handle task selection from URL param
+  useEffect(() => {
+    if (taskIdParam && !loading) {
+      const taskId = parseInt(taskIdParam, 10)
+      if (!isNaN(taskId) && taskId !== selectedTaskId) {
+        selectTask(taskId)
+      }
+    }
+  }, [taskIdParam, loading, selectedTaskId, selectTask])
+
   // Handle navigation from Queue page with task ID in state
   useEffect(() => {
     const state = location.state as { taskId?: number } | null
     if (state?.taskId) {
       selectTask(state.taskId)
-      // Clear the state to prevent re-selecting on subsequent renders
-      window.history.replaceState({}, document.title)
+      // Update URL to include the task ID
+      navigate(`/tasks/${state.taskId}`, { replace: true })
     }
-  }, [location.state, selectTask])
+  }, [location.state, selectTask, navigate])
 
   const filteredTasks = getFilteredTasks()
 
   // Auto-select first task when page loads or when filtered tasks change and no task is selected
   useEffect(() => {
+    if (loading) return
     const hasSelectedTaskInFiltered = filteredTasks.some(t => t.id === selectedTaskId)
-    if (!hasSelectedTaskInFiltered && filteredTasks.length > 0) {
+    if (!hasSelectedTaskInFiltered && filteredTasks.length > 0 && !taskIdParam) {
       selectTask(filteredTasks[0].id)
+      navigate(`/tasks/${filteredTasks[0].id}`, { replace: true })
     }
-  }, [filteredTasks, selectedTaskId, selectTask])
+  }, [filteredTasks, selectedTaskId, selectTask, navigate, taskIdParam, loading])
+
+  // Update URL when task selection changes
+  const handleSelectTask = (id: number) => {
+    selectTask(id)
+    navigate(`/tasks/${id}`, { replace: true })
+  }
 
   // Look for selected task in all tasks first (for Queue navigation), then in filtered tasks
   const selectedTask = tasks.find(t => t.id === selectedTaskId) || filteredTasks.find(t => t.id === selectedTaskId) || filteredTasks[0]
@@ -176,7 +197,7 @@ export default function TasksPage() {
                 task={task}
                 isSelected={task.id === selectedTaskId}
                 isFlagged={isPatientFlagged(task.patient.id)}
-                onClick={() => selectTask(task.id)}
+                onClick={() => handleSelectTask(task.id)}
               />
             ))}
           </div>
@@ -198,7 +219,7 @@ export default function TasksPage() {
               markTaskDone(selectedTask.id)
               // Select next task if available
               if (nextTask && nextTask.id !== selectedTask.id) {
-                selectTask(nextTask.id)
+                handleSelectTask(nextTask.id)
               }
             }}
             onReopen={() => reopenTask(selectedTask.id)}
@@ -397,7 +418,7 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onF
           <div className="relative">
             <div className="absolute left-[11px] top-3 bottom-3 w-px bg-gray-200" />
             <div className="space-y-4">
-              {task.timeline.map(event => (
+              {(task.timeline || []).map(event => (
                 <TimelineEventItem
                   key={event.id}
                   event={event}
@@ -824,6 +845,7 @@ function TimelineEventItem({ event, isExpanded, onToggleTranscript, onToggleNext
   const iconConfig: Record<string, { icon: React.ElementType; bg: string; text: string }> = {
     created: { icon: Plus, bg: 'bg-gray-100', text: 'text-gray-600' },
     voice: { icon: Mic, bg: 'bg-gray-900', text: 'text-white' },
+    call: { icon: Phone, bg: 'bg-blue-500', text: 'text-white' },
     scheduled: { icon: Plus, bg: 'bg-blue-100', text: 'text-blue-600' },
     escalated: { icon: AlertTriangle, bg: 'bg-amber-100', text: 'text-amber-600' },
     completed: { icon: Check, bg: 'bg-green-100', text: 'text-green-600' },
@@ -855,6 +877,10 @@ function TimelineEventItem({ event, isExpanded, onToggleTranscript, onToggleNext
 
       {event.type === 'voice' && (
         <VoiceEventCard event={event as VoiceEvent} isExpanded={isExpanded} onToggle={onToggleTranscript} />
+      )}
+
+      {event.type === 'call' && (
+        <CallEventCard event={event as CallEvent} isExpanded={isExpanded} onToggle={onToggleTranscript} />
       )}
 
       {event.type === 'flag' && (
@@ -1091,6 +1117,166 @@ function NextStepsCard({ event, onToggle }: { event: NextStepsEvent; onToggle: (
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Call Event Card
+function CallEventCard({ event, isExpanded, onToggle }: { event: CallEvent; isExpanded?: boolean; onToggle: () => void }) {
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false)
+  const hasMessages = event.messages && event.messages.length > 0
+  const hasRecording = !!event.recordingUrl
+  const hasSummary = !!event.summary || !!event.analysis?.summary
+  const hasStructuredData = event.analysis?.structuredData && Object.keys(event.analysis.structuredData).length > 0
+
+  // Debug: log analysis data
+  console.log('[CallEventCard] event analysis:', event.analysis)
+  console.log('[CallEventCard] hasStructuredData:', hasStructuredData)
+
+  // Get a friendly status from endedReason
+  const getStatusLabel = (reason: string) => {
+    switch (reason) {
+      case 'assistant-ended-call':
+        return { label: 'Completed', color: 'text-green-600' }
+      case 'voicemail':
+        return { label: 'Voicemail', color: 'text-amber-600' }
+      case 'customer-did-not-answer':
+        return { label: 'No Answer', color: 'text-gray-500' }
+      case 'customer-ended-call':
+        return { label: 'Patient Ended', color: 'text-gray-500' }
+      default:
+        return { label: reason || 'Unknown', color: 'text-gray-500' }
+    }
+  }
+
+  const status = getStatusLabel(event.endedReason)
+  const summaryText = event.summary || event.analysis?.summary
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Phone className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-gray-900">{event.title}</span>
+          <span className={cn('text-sm font-medium', status.color)}>
+            {status.label}
+          </span>
+        </div>
+        <span className="text-xs text-gray-400">{event.timestamp}</span>
+      </div>
+
+      {/* Summary */}
+      {hasSummary && (
+        <p className="text-sm text-gray-600 mt-2">{summaryText}</p>
+      )}
+
+      {/* Structured Data / Extracted Answers from VAPI */}
+      {hasStructuredData && (
+        <div className="mt-3 bg-violet-50 rounded-lg border border-violet-200 p-3">
+          <div className="text-xs font-medium text-violet-700 uppercase tracking-wide mb-2">Patient Responses</div>
+          <div className="space-y-2">
+            {Object.entries(event.analysis!.structuredData!).map(([key, value]) => {
+              // Format the key: snake_case to Title Case
+              const formattedKey = key
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ')
+
+              // Format the value: booleans as Yes/No, arrays as comma-separated, etc.
+              let formattedValue: string
+              if (typeof value === 'boolean') {
+                formattedValue = value ? 'Yes' : 'No'
+              } else if (Array.isArray(value)) {
+                formattedValue = value.join(', ')
+              } else if (value === null || value === undefined) {
+                formattedValue = 'Not provided'
+              } else if (typeof value === 'object') {
+                formattedValue = JSON.stringify(value)
+              } else {
+                formattedValue = String(value)
+              }
+
+              return (
+                <div key={key} className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">{formattedKey}:</span>
+                    <span className="text-sm text-gray-600 ml-1">{formattedValue}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Audio Player */}
+      {hasRecording && showAudioPlayer && (
+        <div className="mt-3">
+          <audio
+            controls
+            autoPlay
+            className="w-full h-10"
+            src={event.recordingUrl}
+          >
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 mt-3">
+        {hasRecording && (
+          <button
+            onClick={() => setShowAudioPlayer(!showAudioPlayer)}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5",
+              showAudioPlayer
+                ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                : "bg-gray-900 text-white hover:bg-gray-800"
+            )}
+          >
+            <Play className="w-3 h-3" fill="currentColor" />
+            {showAudioPlayer ? 'Hide Player' : 'Play Recording'}
+          </button>
+        )}
+        {hasMessages && (
+          <button onClick={onToggle} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            <ChevronDown className={cn('w-4 h-4 transition-transform', isExpanded && 'rotate-180')} />
+            View Transcript
+          </button>
+        )}
+      </div>
+
+      {isExpanded && hasMessages && (
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+          {event.messages!.map((msg, i) => (
+            <div key={i} className={cn('flex', msg.speaker === 'ai' ? 'justify-start' : 'justify-end')}>
+              <div className={cn(
+                'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+                msg.speaker === 'ai' ? 'bg-gray-100' : 'bg-blue-500 text-white',
+                msg.flagged && 'bg-red-50 border border-red-200 text-red-800'
+              )}>
+                {msg.flagged && (
+                  <div className="flex items-center gap-1 text-xs font-medium text-red-600 mb-1">
+                    <AlertTriangle className="w-3 h-3" /> Flagged content
+                  </div>
+                )}
+                <p>{msg.text}</p>
+                <p className={cn('text-[10px] mt-1', msg.speaker === 'ai' ? 'text-gray-500' : msg.flagged ? 'text-red-500' : 'text-blue-100')}>
+                  {msg.time}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Show raw transcript if no parsed messages */}
+      {!hasMessages && event.transcript && (
+        <div className="mt-3 p-3 bg-gray-50 rounded text-sm whitespace-pre-wrap">
+          {event.transcript}
+        </div>
+      )}
     </div>
   )
 }

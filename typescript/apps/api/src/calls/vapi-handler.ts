@@ -1,11 +1,28 @@
 import type { TranscriptMessage, CallEndedReason } from '@repo/database'
 import { parsePhoneNumberFromString, isValidPhoneNumber } from 'libphonenumber-js'
+import { VapiClient, Vapi } from '@vapi-ai/server-sdk'
 
-// VAPI API configuration
-const VAPI_API_KEY = process.env.VAPI_API_KEY || ''
-const VAPI_BASE_URL = 'https://api.vapi.ai'
+// Re-export VAPI types for use in other modules
+export type VapiCall = Vapi.Call
+export type VapiAnalysis = Vapi.Analysis
+export type VapiArtifact = Vapi.Artifact
+
+// VAPI client - lazy initialization
+let vapiClient: VapiClient | null = null
+
+function getVapiClient(): VapiClient {
+  if (!vapiClient) {
+    const apiKey = process.env.VAPI_API_KEY
+    if (!apiKey) {
+      throw new Error('VAPI_API_KEY not configured')
+    }
+    vapiClient = new VapiClient({ token: apiKey })
+  }
+  return vapiClient
+}
+
 // Webhook URL for VAPI to call back (set via env for local/cloud)
-const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL || process.env.API_URL || ''
+const getWebhookBaseUrl = () => process.env.WEBHOOK_BASE_URL || process.env.API_URL || ''
 
 // Validate and format phone number to E.164 format for VAPI
 // Returns { valid: true, e164: "+1..." } or { valid: false, error: "..." }
@@ -148,23 +165,32 @@ export function detectAbusiveLanguage(messages: TranscriptMessage[]): boolean {
   return false
 }
 
-// VAPI API calls
+// Result type for getCallStatus - matches VAPI SDK Call type but simplified
+export interface VapiCallStatus {
+  id: string
+  status: string
+  endedReason?: Vapi.CallEndedReason
+  transcript?: string
+  recordingUrl?: string
+  stereoRecordingUrl?: string
+  messages?: Vapi.CallMessagesItem[]
+  artifact?: Vapi.Artifact
+  analysis?: Vapi.Analysis
+  summary?: string
+}
+
+// VAPI API calls using official SDK
 export const vapiApi = {
   // Start an outbound call
   async startCall(params: {
     assistantId: string
     phoneNumber: string
     customerNumber: string
-    assistantOverrides?: {
-      variableValues?: Record<string, string>
-    }
+    assistantOverrides?: Vapi.AssistantOverrides
   }): Promise<{ id: string; status: string } | null> {
-    if (!VAPI_API_KEY) {
-      console.error('VAPI_API_KEY not configured')
-      return null
-    }
-
     try {
+      const client = getVapiClient()
+
       // Validate and format phone number to E.164
       const phoneResult = validateAndFormatPhone(params.customerNumber)
       if (!phoneResult.valid) {
@@ -172,109 +198,83 @@ export const vapiApi = {
         return null
       }
 
-      // Build request body
-      const requestBody: Record<string, unknown> = {
+      // Build assistant overrides with server URL if configured
+      let assistantOverrides = params.assistantOverrides
+      const webhookBaseUrl = getWebhookBaseUrl()
+      if (webhookBaseUrl) {
+        assistantOverrides = {
+          ...assistantOverrides,
+          server: {
+            url: `${webhookBaseUrl}/api/calls/webhook`,
+          },
+        }
+      }
+
+      // Build request using SDK types
+      const callRequest: Vapi.CreateCallDto = {
         assistantId: params.assistantId,
-        phoneNumberId: params.phoneNumber, // VAPI phone number ID
+        phoneNumberId: params.phoneNumber,
         customer: {
-          number: phoneResult.e164, // Patient phone number in E.164 format
+          number: phoneResult.e164,
         },
-        assistantOverrides: params.assistantOverrides,
+        assistantOverrides,
       }
 
-      // Add webhook URL if configured (for receiving call events)
-      if (WEBHOOK_BASE_URL) {
-        requestBody.serverUrl = `${WEBHOOK_BASE_URL}/api/calls/webhook`
-      }
+      const response = await client.calls.create(callRequest)
+      // Response can be Call or CallBatchResponse, we expect Call for single call
+      const call = response as Vapi.Call
+      console.log('[VAPI SDK] Call created:', call.id)
 
-      const response = await fetch(`${VAPI_BASE_URL}/call`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
-
-      if (!response.ok) {
-        const error = await response.text()
-        console.error('VAPI start call failed:', error)
-        return null
-      }
-
-      return response.json()
+      return { id: call.id, status: call.status || 'queued' }
     } catch (error) {
       console.error('VAPI start call error:', error)
       return null
     }
   },
 
-  // Get call status
-  async getCallStatus(callId: string): Promise<{
-    id: string
-    status: string
-    endedReason?: string
-    transcript?: string
-    messages?: Array<{
-      role: string
-      message: string
-      time?: number
-      endTime?: number
-    }>
-    artifact?: {
-      messages?: Array<{
-        role: string
-        message: string
-        time?: number
-        endTime?: number
-      }>
-      transcript?: string
-    }
-  } | null> {
-    if (!VAPI_API_KEY) {
-      console.error('VAPI_API_KEY not configured')
-      return null
-    }
-
+  // Get call status using SDK
+  async getCallStatus(callId: string): Promise<VapiCallStatus | null> {
     try {
-      const response = await fetch(`${VAPI_BASE_URL}/call/${callId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      })
+      const client = getVapiClient()
+      const callData = await client.calls.get({ id: callId })
 
-      if (!response.ok) {
-        const error = await response.text()
-        console.error('VAPI get call status failed:', error)
-        return null
+      // Log raw SDK response for debugging
+      console.log('[VAPI SDK] Call data keys:', Object.keys(callData))
+      if (callData.analysis) {
+        console.log('[VAPI SDK] analysis:', JSON.stringify(callData.analysis))
+      }
+      if (callData.artifact) {
+        console.log('[VAPI SDK] artifact keys:', Object.keys(callData.artifact))
+        if (callData.artifact.structuredOutputs) {
+          console.log('[VAPI SDK] structuredOutputs:', JSON.stringify(callData.artifact.structuredOutputs))
+        }
       }
 
-      return response.json()
+      // Return call data - SDK types match our interface
+      return {
+        id: callData.id,
+        status: callData.status || 'unknown',
+        endedReason: callData.endedReason,
+        transcript: callData.artifact?.transcript,
+        recordingUrl: callData.artifact?.recordingUrl,
+        stereoRecordingUrl: callData.artifact?.stereoRecordingUrl,
+        messages: callData.messages,
+        artifact: callData.artifact,
+        analysis: callData.analysis,
+        summary: callData.analysis?.summary,
+      }
     } catch (error) {
       console.error('VAPI get call status error:', error)
       return null
     }
   },
 
-  // End a call
+  // End a call using SDK
   async endCall(callId: string): Promise<boolean> {
-    if (!VAPI_API_KEY) {
-      console.error('VAPI_API_KEY not configured')
-      return false
-    }
-
     try {
-      const response = await fetch(`${VAPI_BASE_URL}/call/${callId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      return response.ok
+      const client = getVapiClient()
+      await client.calls.delete({ id: callId })
+      return true
     } catch (error) {
       console.error('VAPI end call error:', error)
       return false
@@ -283,21 +283,14 @@ export const vapiApi = {
 }
 
 // Parse VAPI messages to TranscriptMessage format
-export function parseVapiMessages(vapiData: {
-  messages?: Array<{ role: string; message: string; time?: number }>
-  artifact?: {
-    messages?: Array<{ role: string; message: string; time?: number }>
-    transcript?: string
-  }
-  transcript?: string
-}): TranscriptMessage[] {
-  // Try different sources for messages
+export function parseVapiMessages(vapiData: VapiCallStatus): TranscriptMessage[] {
+  // Try different sources for messages - SDK types use Vapi.CallMessagesItem[] and Vapi.ArtifactMessagesItem[]
   const rawMessages = vapiData.messages || vapiData.artifact?.messages || []
 
   if (rawMessages.length === 0 && vapiData.artifact?.transcript) {
     // Parse from transcript string
     const lines = vapiData.artifact.transcript.split('\n').filter(Boolean)
-    return lines.map((line, idx) => {
+    return lines.map((line) => {
       const isAI = line.toLowerCase().startsWith('ai:') || line.toLowerCase().startsWith('assistant:')
       const text = line.replace(/^(ai|assistant|user|patient|human):\s*/i, '')
       return {
@@ -308,13 +301,22 @@ export function parseVapiMessages(vapiData: {
     })
   }
 
-  return rawMessages.map((msg) => ({
-    speaker: msg.role === 'assistant' || msg.role === 'bot' ? 'ai' as const : 'patient' as const,
-    text: msg.message,
-    time: msg.time
-      ? new Date(msg.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-      : new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-  }))
+  // Extract text from message items - VAPI messages can have different types
+  return rawMessages.map((msg) => {
+    // Handle different message types from VAPI SDK
+    const msgAny = msg as { role?: string; message?: string; time?: number; content?: string }
+    const role = msgAny.role || 'user'
+    const text = msgAny.message || msgAny.content || ''
+    const time = msgAny.time
+
+    return {
+      speaker: role === 'assistant' || role === 'bot' ? 'ai' as const : 'patient' as const,
+      text,
+      time: time
+        ? new Date(time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    }
+  })
 }
 
 // Determine if call should complete or escalate task

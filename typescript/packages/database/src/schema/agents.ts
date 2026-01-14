@@ -25,6 +25,23 @@ export interface AgentObjective {
 // Event action types
 export type EventAction = 'complete' | 'retry' | 'escalate' | 'none'
 
+// Analysis schema for structured data extraction from calls
+export interface AnalysisSchemaProperty {
+  type: 'string' | 'boolean' | 'number' | 'object' | 'array'
+  description?: string
+  enum?: string[]
+  format?: string
+  properties?: Record<string, AnalysisSchemaProperty>
+  required?: string[]
+  items?: AnalysisSchemaProperty
+}
+
+export interface AnalysisSchema {
+  type: 'object'
+  properties: Record<string, AnalysisSchemaProperty>
+  required?: string[]
+}
+
 // Event handling configuration
 export interface EventHandling {
   voicemail: {
@@ -94,6 +111,10 @@ export const agents = pgTable('agents', {
 
   // Event handling configuration
   eventHandling: jsonb('event_handling').$type<EventHandling>(),
+
+  // Analysis schema for structured data extraction from calls
+  // Defines what questions/data to extract during the call
+  analysisSchema: jsonb('analysis_schema').$type<AnalysisSchema>(),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

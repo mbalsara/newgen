@@ -26,6 +26,13 @@ export type CallEndedReason =
 // Re-export TranscriptMessage from tasks for convenience
 export type { TranscriptMessage } from './tasks'
 
+// Analysis data from VAPI
+export interface CallAnalysis {
+  summary?: string
+  structuredData?: Record<string, unknown>
+  successEvaluation?: string
+}
+
 // Calls table - tracks all outbound/inbound calls
 export const calls = pgTable('calls', {
   id: text('id').primaryKey(), // VAPI call ID
@@ -39,6 +46,11 @@ export const calls = pgTable('calls', {
   // Transcript
   transcript: text('transcript'), // Full transcript as text
   messages: jsonb('messages').$type<TranscriptMessage[]>().default([]),
+  // Recording
+  recordingUrl: text('recording_url'), // VAPI recording URL
+  // Analysis from VAPI (summary, structured data, etc.)
+  analysis: jsonb('analysis').$type<CallAnalysis>(),
+  summary: text('summary'), // Call summary
   // Abusive language detection
   hasAbusiveLanguage: boolean('has_abusive_language').default(false),
   // Timestamps
