@@ -178,4 +178,37 @@ export const schedulingService = {
       message: "I've requested a callback from our scheduling team. They'll call you back within 24 hours.",
     }
   },
+
+  /**
+   * Send SMS confirmation
+   * TODO: Replace with Twilio integration
+   */
+  async sendSmsConfirmation(params: {
+    phoneNumber: string
+    appointmentDate: string
+    appointmentTime: string
+    providerName?: string
+    locationOrNotes?: string
+  }): Promise<{ success: boolean; message: string }> {
+    const { phoneNumber, appointmentDate, appointmentTime, providerName, locationOrNotes } = params
+
+    // Compose SMS message
+    const smsBody = `Your appointment with ${providerName || 'your provider'} is confirmed for ${appointmentDate} at ${appointmentTime}.${locationOrNotes ? ` ${locationOrNotes}` : ''} - Dr. Sahai's Office`
+
+    console.log(`[Scheduling] SMS to ${phoneNumber}:`, smsBody)
+
+    // TODO: Replace with actual Twilio integration
+    // const twilio = require('twilio')(TWILIO_SID, TWILIO_AUTH)
+    // await twilio.messages.create({
+    //   body: smsBody,
+    //   from: TWILIO_PHONE,
+    //   to: phoneNumber,
+    // })
+
+    // For now, just log and return success
+    return {
+      success: true,
+      message: 'Text confirmation sent!',
+    }
+  },
 }

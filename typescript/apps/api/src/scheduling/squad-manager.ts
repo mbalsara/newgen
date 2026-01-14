@@ -90,9 +90,11 @@ Simply continue naturally as if you're the same person.
 When patient chooses:
 "Perfect, let me book that for you..."
 [Call book_appointment tool]
-"All set! Your new appointment is [day] at [time]."
+"All set! Your new appointment is [day] at [time]. Would you like me to send you a text confirmation?"
+- If yes: [Call send_sms_confirmation tool] "Done, you'll get that shortly."
+- If no: "No problem."
 
-Then IMMEDIATELY use transfer_back tool to continue the call.
+Then use transfer_back tool to continue the call.
 
 **4. HANDLE NO AVAILABILITY**
 If no suitable slots:
@@ -162,6 +164,25 @@ If patient says "actually, I'll keep my current appointment":
             },
           },
           server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/request-callback` },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'send_sms_confirmation',
+            description: 'Send an SMS confirmation to the patient after booking. Call this if patient says yes to receiving a text confirmation.',
+            parameters: {
+              type: 'object',
+              properties: {
+                appointmentDate: { type: 'string', description: 'e.g., Friday, January 20th' },
+                appointmentTime: { type: 'string', description: 'e.g., 9:00 AM' },
+                providerName: { type: 'string', description: 'e.g., Dr. Sahai' },
+                locationOrNotes: { type: 'string', description: 'Any additional info' },
+              },
+              required: ['appointmentDate', 'appointmentTime'],
+            },
+          },
+          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/send-sms-confirmation` },
+          messages: [{ type: 'request-start', content: 'Sending you a text now...' }],
         },
         {
           type: 'transferCall',

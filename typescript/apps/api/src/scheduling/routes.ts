@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono'
 import { schedulingService } from './service'
-import { createTrikaPftSquad, getOrCreateTrikaPftSquad } from './squad-manager'
+import { createEricaBrownPftSquad, getOrCreateEricaBrownPftSquad, deleteAllVapiResources } from './squad-manager'
 import {
   CheckAvailabilityRequestSchema,
   BookAppointmentRequestSchema,
@@ -16,12 +16,12 @@ const scheduling = new Hono()
 
 /**
  * POST /api/scheduling/squad/create
- * Create the Trika PFT Squad in VAPI
+ * Create the Erica Brown PFT Squad in VAPI
  */
 scheduling.post('/squad/create', async (c) => {
   try {
-    console.log('[Scheduling] Creating Trika PFT Squad...')
-    const result = await createTrikaPftSquad()
+    console.log('[Scheduling] Creating Erica Brown PFT Squad...')
+    const result = await createEricaBrownPftSquad()
     return c.json(result, 201)
   } catch (error) {
     console.error('[Scheduling] Error creating squad:', error)
@@ -31,15 +31,30 @@ scheduling.post('/squad/create', async (c) => {
 
 /**
  * GET /api/scheduling/squad
- * Get or create the Trika PFT Squad
+ * Get or create the Erica Brown PFT Squad
  */
 scheduling.get('/squad', async (c) => {
   try {
-    const squadId = await getOrCreateTrikaPftSquad()
+    const squadId = await getOrCreateEricaBrownPftSquad()
     return c.json({ squadId })
   } catch (error) {
     console.error('[Scheduling] Error getting squad:', error)
     return c.json({ error: 'Failed to get squad', details: String(error) }, 500)
+  }
+})
+
+/**
+ * DELETE /api/scheduling/vapi/reset
+ * Delete all VAPI squads and assistants
+ */
+scheduling.delete('/vapi/reset', async (c) => {
+  try {
+    console.log('[Scheduling] Resetting VAPI resources...')
+    const result = await deleteAllVapiResources()
+    return c.json(result)
+  } catch (error) {
+    console.error('[Scheduling] Error resetting VAPI:', error)
+    return c.json({ error: 'Failed to reset VAPI', details: String(error) }, 500)
   }
 })
 
@@ -176,6 +191,60 @@ scheduling.post('/request-callback', async (c) => {
         result: JSON.stringify({
           success: true,
           message: "I've requested a callback from our scheduling team."
+        })
+      }]
+    })
+  }
+})
+
+/**
+ * POST /api/scheduling/send-sms-confirmation
+ * VAPI tool webhook: Send SMS confirmation after booking
+ */
+scheduling.post('/send-sms-confirmation', async (c) => {
+  try {
+    const body = await c.req.json()
+    console.log('[Scheduling] send-sms-confirmation request:', body)
+
+    // Extract the function arguments and call info
+    const args = body.message?.functionCall?.parameters || body
+    const customerNumber = body.call?.customer?.number || body.customer?.number
+
+    if (!customerNumber) {
+      console.error('[Scheduling] No customer number available for SMS')
+      return c.json({
+        results: [{
+          result: JSON.stringify({
+            success: false,
+            message: "I don't have a phone number to send the text to."
+          })
+        }]
+      })
+    }
+
+    const { appointmentDate, appointmentTime, providerName, locationOrNotes } = args
+
+    // Send SMS (mock for now - replace with Twilio integration)
+    const smsResult = await schedulingService.sendSmsConfirmation({
+      phoneNumber: customerNumber,
+      appointmentDate: appointmentDate || 'your scheduled date',
+      appointmentTime: appointmentTime || 'your scheduled time',
+      providerName: providerName || "Dr. Sahai",
+      locationOrNotes,
+    })
+
+    return c.json({
+      results: [{
+        result: JSON.stringify(smsResult)
+      }]
+    })
+  } catch (error) {
+    console.error('[Scheduling] send-sms-confirmation error:', error)
+    return c.json({
+      results: [{
+        result: JSON.stringify({
+          success: true, // Don't fail the call over SMS
+          message: "I made a note to send you the confirmation."
         })
       }]
     })
