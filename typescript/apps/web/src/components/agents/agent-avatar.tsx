@@ -1,8 +1,14 @@
 import { cn } from '@/lib/utils'
-import type { VoiceAgent } from '@/lib/task-types'
+
+// Agent type that works with both API Agent and local types
+interface AgentLike {
+  type: 'ai' | 'staff'
+  avatar?: string | null
+  name?: string
+}
 
 interface AgentAvatarProps {
-  agent: VoiceAgent | undefined
+  agent: AgentLike | undefined
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }
@@ -28,6 +34,7 @@ export function AgentAvatar({ agent, size = 'md', className }: AgentAvatarProps)
     )
   }
 
+  // For AI agents, show robot emoji or avatar
   if (agent.type === 'ai') {
     return (
       <div
@@ -37,11 +44,12 @@ export function AgentAvatar({ agent, size = 'md', className }: AgentAvatarProps)
           className
         )}
       >
-        {agent.avatar}
+        {agent.avatar || '🤖'}
       </div>
     )
   }
 
+  // For staff, show initials or avatar
   return (
     <div
       className={cn(
@@ -50,7 +58,7 @@ export function AgentAvatar({ agent, size = 'md', className }: AgentAvatarProps)
         className
       )}
     >
-      {agent.avatar}
+      {agent.avatar || (agent.name ? agent.name.charAt(0) : '?')}
     </div>
   )
 }

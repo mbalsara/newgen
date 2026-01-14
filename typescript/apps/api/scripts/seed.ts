@@ -157,6 +157,188 @@ When ending the call:
       required: ['recording_consent', 'symptom_changes', 'rescue_inhaler_count', 'medication_compliant'],
     },
   },
+  // New PFT agent with squad capability (for rescheduling)
+  {
+    id: 'ai-trika-pft-squad',
+    name: 'Trika (Squad)',
+    type: 'ai',
+    role: 'PFT Follow-up with Rescheduling',
+    avatar: '🤖',
+    vapiAssistantId: '306c5a82-9c92-4049-8adb-9f22546e4910',
+    voiceId: '21m00Tcm4TlvDq8ikWAM',
+    voiceProvider: '11labs',
+    voiceSpeed: 0.9,
+    model: 'gpt-4o-mini',
+    modelProvider: 'openai',
+    waitForGreeting: true,
+    greeting: "Hi, is this {{patient_name}}?",
+    systemPrompt: `You are {{agent_name}}, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
+
+## HOW TO SOUND HUMAN
+- Be conversational, warm, and natural - like a real person, not a script
+- Use brief acknowledgments: "Got it", "Okay", "I see", "Alright"
+- LISTEN to what the patient says - don't ask questions they've already answered
+- Match their pace - if they're chatty, engage; if brief, be brief
+
+## VOICEMAIL
+If you reach voicemail, wait for the beep then say: "Hi, this is {{agent_name}} from Dr. Sahai's office checking in after your breathing test. Please call us at {{practice_phone}}. Thanks!" Then hang up.
+
+## CALL FLOW
+
+**1. INTRO**
+"Hi, is this {{patient_name}}?"
+[Wait]
+"This is {{agent_name}} from Dr. Sahai's office - just checking in after your breathing test yesterday. Got a minute? This call is recorded."
+
+**2. HOW ARE YOU?**
+"How are you feeling? Any changes since the test?"
+
+LISTEN CAREFULLY to their response:
+- If they say "good/fine/same" → Say "Great!" and go straight to medications
+- If they mention ANY symptom → Have a natural conversation about it
+
+**IMPORTANT: Don't ask redundant questions!**
+- If they mention shortness of breath - don't ask about it again
+- Acknowledge symptoms they mention, only ask about symptoms they HAVEN'T mentioned
+
+After discussing symptoms: "Would you like to come in sooner than your scheduled appointment?"
+- If yes: "Sure, let me check what's available..." [use transfer_to_scheduler tool]
+- If no: "Okay, no problem."
+
+**3. MEDICATIONS**
+"Quick question - how many times have you used your rescue inhaler since the test?"
+[Wait, then: "Okay" or "Got it"]
+
+"And your other medications - been taking those?"
+[If yes: "Good"]
+
+**4. WRAP UP**
+"Alright, that's everything. We'll see you at your follow-up to go over the results. Take care!"
+
+## RESCHEDULING
+If at ANY point the patient says they want to reschedule, change their appointment, or can't make it:
+- Use the transfer_to_scheduler tool immediately
+- The scheduling assistant will handle the rescheduling and transfer back
+- After transfer back, continue with remaining questions (medications, etc.)
+
+## KEY RULES
+- NEVER ask a question the patient already answered
+- Sound like a helpful human, not a checklist
+- If patient wants to reschedule, use transfer_to_scheduler tool`,
+    specialty: 'other',
+    practiceName: 'Trika Medical',
+    practicePhone: '555-TRIKA-MD',
+    maxRetries: 3,
+    retryDelayMinutes: 120,
+    analysisSchema: {
+      type: 'object',
+      properties: {
+        recording_consent: { type: 'boolean', description: 'Did patient consent to call recording' },
+        symptom_changes: { type: 'string', description: 'Any changes in respiratory symptoms since last visit' },
+        cough_status: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Current cough status'
+        },
+        shortness_of_breath: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Shortness of breath status'
+        },
+        noisy_breathing: {
+          type: 'string',
+          enum: ['improved', 'same', 'worse', 'none', 'not_discussed'],
+          description: 'Wheezing or noisy breathing status'
+        },
+        rescue_inhaler_count: { type: 'number', description: 'Times rescue inhaler used since test' },
+        medication_compliant: { type: 'boolean', description: 'Is patient taking medications as prescribed' },
+        wants_reschedule: { type: 'boolean', description: 'Does patient want to reschedule to come in sooner' },
+        patient_concerns: { type: 'string', description: 'Any additional concerns or questions from patient' },
+        rescheduled: { type: 'boolean', description: 'Was appointment rescheduled during call' },
+        new_appointment_date: { type: 'string', description: 'New appointment date if rescheduled' },
+      },
+      required: ['recording_consent', 'symptom_changes', 'rescue_inhaler_count', 'medication_compliant'],
+    },
+  },
+  // Scheduling Assistant for squad transfers
+  {
+    id: 'ai-reschedule',
+    name: 'Scheduling Assistant',
+    type: 'ai',
+    role: 'Appointment Rescheduling',
+    avatar: '📅',
+    vapiAssistantId: null, // Created via API as part of squad
+    voiceId: '21m00Tcm4TlvDq8ikWAM', // Same voice for seamless transfer
+    voiceProvider: '11labs',
+    voiceSpeed: 0.9,
+    model: 'gpt-4o-mini',
+    modelProvider: 'openai',
+    waitForGreeting: false,
+    greeting: null,
+    systemPrompt: `You are a scheduling assistant helping a patient reschedule their appointment. You've just been handed a call from a colleague.
+
+## IMPORTANT: SEAMLESS EXPERIENCE
+The patient should feel like they're talking to the SAME person. Do NOT:
+- Re-introduce yourself
+- Say "I'm the scheduling assistant"
+- Say "I've been transferred to help you"
+
+Simply continue naturally as if you're the same person.
+
+## CONVERSATION FLOW
+
+**1. ACKNOWLEDGE & CHECK**
+"Sure, let me check what's available..."
+[Call check_availability tool]
+
+**2. OFFER TIMES**
+"I have a few openings. How about [day] at [time]? Or I also have [day] at [time]."
+
+**3. CONFIRM SELECTION**
+When patient chooses:
+"Perfect, let me book that for you..."
+[Call book_appointment tool]
+"All set! Your new appointment is [day] at [time]."
+
+Then IMMEDIATELY use transfer_back_to_followup
+
+**4. HANDLE NO AVAILABILITY**
+If no suitable slots:
+"I'm sorry, we're quite full. Would you like a callback when something opens up?"
+
+**5. PATIENT KEEPS ORIGINAL**
+If patient says "actually, I'll keep my current appointment":
+"No problem, we'll keep you at [original date/time]."
+[IMMEDIATELY use transfer_back_to_followup]
+
+## KEY RULES
+- Be efficient
+- After booking OR keeping original, transfer back immediately
+- NEVER say goodbye - you're transferring back`,
+    specialty: 'general',
+    practiceName: 'Trika Medical',
+    practicePhone: '555-TRIKA-MD',
+    maxRetries: 1,
+    retryDelayMinutes: 0,
+    analysisSchema: {
+      type: 'object',
+      properties: {
+        reschedule_reason: { type: 'string', description: 'Why patient wants to reschedule' },
+        preferred_time_of_day: {
+          type: 'string',
+          enum: ['morning', 'afternoon', 'evening', 'no_preference'],
+        },
+        new_appointment_date: { type: 'string', description: 'New appointment date (YYYY-MM-DD)' },
+        new_appointment_time: { type: 'string', description: 'New appointment time (HH:MM)' },
+        rescheduled_successfully: { type: 'boolean' },
+        outcome: {
+          type: 'string',
+          enum: ['booked', 'callback_requested', 'kept_original', 'escalated'],
+        },
+      },
+      required: ['rescheduled_successfully', 'outcome'],
+    },
+  },
 ]
 
 // Staff members
@@ -187,8 +369,10 @@ const samplePatients: NewPatient[] = [
   { id: 'PT-3847', name: 'Robert Taylor', phone: '(555) 567-8901', dob: '02/28/1958' },
   { id: 'PT-4123', name: 'Linda Martinez', phone: '(555) 678-9012', dob: '04/12/1982' },
   { id: 'PT-5234', name: 'David Kim', phone: '(555) 789-0123', dob: '08/25/1975' },
-  // PFT Follow-up test patient
+  // PFT Follow-up test patient (original agent)
   { id: 'PT-PFT-001', name: 'Margaret Thompson', phone: '(555) 111-2222', dob: '06/20/1962' },
+  // PFT Follow-up test patient (squad-enabled agent with rescheduling)
+  { id: 'PT-PFT-002', name: 'Robert Jenkins', phone: '(555) 333-4444', dob: '03/10/1955' },
 ]
 
 // Sample tasks (references patient IDs)
@@ -420,7 +604,7 @@ const sampleTasks: NewTask[] = [
       },
     ],
   },
-  // PFT Follow-up Test Task (Pulmonology Post-Visit)
+  // PFT Follow-up Test Task (Pulmonology Post-Visit) - Original agent
   {
     patientId: 'PT-PFT-001',
     provider: 'Dr. Sahai',
@@ -438,6 +622,27 @@ const sampleTasks: NewTask[] = [
         timestamp: 'Jan 13, 9:00 AM',
         title: 'Task Created',
         description: 'PFT follow-up call for Margaret Thompson. Breathing test completed Jan 12. Follow-up appointment scheduled Jan 19.',
+      },
+    ],
+  },
+  // PFT Follow-up Test Task (Squad-enabled agent with rescheduling capability)
+  {
+    patientId: 'PT-PFT-002',
+    provider: 'Dr. Sahai',
+    type: 'post-visit',
+    status: 'pending',
+    assignedAgentId: 'ai-trika-pft-squad',
+    time: '30m ago',
+    unread: true,
+    description: 'PFT follow-up call (Squad) - breathing test completed Jan 13',
+    ehrSync: { status: 'pending', lastSync: null },
+    timeline: [
+      {
+        id: 'created-pft-2',
+        type: 'created',
+        timestamp: 'Jan 14, 10:00 AM',
+        title: 'Task Created',
+        description: 'PFT follow-up call for Robert Jenkins. Breathing test completed Jan 13. Follow-up appointment scheduled Jan 20. This task uses the squad-enabled agent with rescheduling capability.',
       },
     ],
   },

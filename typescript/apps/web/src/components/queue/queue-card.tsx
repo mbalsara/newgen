@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router'
 import { AlertTriangle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
-import { getAgent } from '@/lib/mock-agents'
 import { useTasks } from '@/contexts/tasks-context'
 import type { Task } from '@/lib/task-types'
 import { cn } from '@/lib/utils'
@@ -22,7 +21,7 @@ const typeDescriptions: Record<string, string> = {
 
 export function QueueCard({ task }: QueueCardProps) {
   const navigate = useNavigate()
-  const { isPatientFlagged, selectTask } = useTasks()
+  const { isPatientFlagged, selectTask, getAgent } = useTasks()
   const agent = getAgent(task.assignedAgent)
   const flagged = isPatientFlagged(task.patient.id)
 

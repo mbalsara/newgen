@@ -21,6 +21,7 @@ import { schema } from './graphql/schema.js'
 import { agentRoutes } from './agents/routes.js'
 import { taskRoutes } from './tasks/routes.js'
 import { callRoutes } from './calls/routes.js'
+import { schedulingRoutes } from './scheduling/routes.js'
 
 const app = new Hono()
 
@@ -44,6 +45,7 @@ app.get('/health', (c) => {
 app.route('/api/agents', agentRoutes)
 app.route('/api/tasks', taskRoutes)
 app.route('/api/calls', callRoutes)
+app.route('/api/scheduling', schedulingRoutes)
 
 // =============================================================================
 // VAPI Proxy Routes
