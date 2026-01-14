@@ -31,6 +31,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   const [endedReason, setEndedReason] = useState<string | undefined>(undefined)
   const [reasonInfo, setReasonInfo] = useState<CallStatusResponse['reasonInfo'] | null>(null)
   const [taskUpdateResult, setTaskUpdateResult] = useState<{ action: string; message: string } | null>(null)
+  const [processingCall, setProcessingCall] = useState(false)
   const [agent, setAgent] = useState<Agent | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -89,8 +90,14 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
         }
 
         // Handle call completion - backend will update task
-        const result = await handleCallCompletion(task.id, id)
-        setTaskUpdateResult(result)
+        // Show processing state while waiting for transcript/recording/analysis
+        setProcessingCall(true)
+        try {
+          const result = await handleCallCompletion(task.id, id)
+          setTaskUpdateResult(result)
+        } finally {
+          setProcessingCall(false)
+        }
       }
 
       // Update transcript
@@ -220,6 +227,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
     setEndedReason(undefined)
     setReasonInfo(null)
     setTaskUpdateResult(null)
+    setProcessingCall(false)
   }
 
   const formatTime = (seconds: number) => {
@@ -379,19 +387,27 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                 <>
                   <div className={cn(
                     'w-16 h-16 rounded-full flex items-center justify-center mb-4',
+                    processingCall ? 'bg-blue-100' :
                     reasonInfo.isSuccess || isVoicemail ? 'bg-green-100' :
                     isNoAnswer ? 'bg-orange-100' :
                     'bg-gray-100'
                   )}>
-                    {reasonInfo.isSuccess || isVoicemail ? <CheckCircle className="h-8 w-8 text-green-600" /> :
+                    {processingCall ? <Loader2 className="h-8 w-8 text-blue-600 animate-spin" /> :
+                     reasonInfo.isSuccess || isVoicemail ? <CheckCircle className="h-8 w-8 text-green-600" /> :
                      isNoAnswer ? <PhoneMissed className="h-8 w-8 text-orange-600" /> :
                      <XCircle className="h-8 w-8 text-gray-400" />}
                   </div>
-                  <h4 className="font-medium mb-1">{reasonInfo.title}</h4>
-                  <p className="text-sm text-muted-foreground max-w-xs">{reasonInfo.description}</p>
+                  <h4 className="font-medium mb-1">
+                    {processingCall ? 'Processing Call...' : reasonInfo.title}
+                  </h4>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    {processingCall
+                      ? 'Retrieving transcript, recording, and analysis. This may take up to 30 seconds.'
+                      : reasonInfo.description}
+                  </p>
 
                   {/* Task update result */}
-                  {taskUpdateResult && (
+                  {taskUpdateResult && !processingCall && (
                     <div className={cn(
                       'mt-4 p-3 rounded-lg text-sm max-w-xs',
                       taskUpdateResult.action === 'completed' ? 'bg-green-50 text-green-700' :
@@ -402,7 +418,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                     </div>
                   )}
 
-                  {reasonInfo.canRetry && !taskUpdateResult && (
+                  {reasonInfo.canRetry && !taskUpdateResult && !processingCall && (
                     <p className="text-xs text-muted-foreground mt-2">
                       You can try calling again using the button below.
                     </p>
@@ -452,7 +468,16 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
             </Button>
           ) : reasonInfo && (
             <>
-              {reasonInfo.canRetry && (
+              {processingCall ? (
+                <Button
+                  size="lg"
+                  disabled
+                  className="bg-blue-600"
+                >
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Processing...
+                </Button>
+              ) : reasonInfo.canRetry && (
                 endedReason === 'customer-did-not-answer' ||
                 endedReason === 'customer-busy' ||
                 endedReason === 'voicemail' ||
@@ -480,8 +505,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                 onClick={onClose}
                 variant={reasonInfo.canRetry ? 'outline' : 'default'}
                 size="lg"
+                disabled={processingCall}
               >
-                Back to Task
+                {processingCall ? 'Please wait...' : 'Back to Task'}
               </Button>
             </>
           )}
