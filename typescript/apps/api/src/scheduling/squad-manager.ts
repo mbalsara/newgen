@@ -37,6 +37,9 @@ const MODEL_CONFIG = {
   model: 'gpt-4o-mini',
 }
 
+// Shared scheduler assistant ID (created once, reused across all squads)
+let sharedSchedulerId: string | null = null
+
 // Primary agent configuration for squad creation
 export interface PrimaryAgentConfig {
   name: string           // e.g., "Erica Brown PFT", "Luna Confirmation"
@@ -45,29 +48,8 @@ export interface PrimaryAgentConfig {
   voiceConfig?: typeof VOICE_CONFIG
 }
 
-/**
- * Create a squad with any primary agent + the shared scheduling assistant
- * The scheduler will transfer back to whatever agent called it
- */
-export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
-  squadId: string
-  assistantIds: { primary: string; scheduler: string }
-}> {
-  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG } = config
-  const squadName = `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
-
-  console.log(`[SquadManager] Creating squad for ${name}...`)
-
-  // Create the Scheduling Assistant with transfer back to THIS primary agent
-  const schedulerAssistant = await getVapiClient().assistants.create({
-    name: `Scheduler for ${name}`,
-    voice: voiceConfig,
-    model: {
-      ...MODEL_CONFIG,
-      messages: [
-        {
-          role: 'system',
-          content: `You are a scheduling assistant helping a patient reschedule their appointment. You've just been handed a call from a colleague.
+// Shared scheduler system prompt - generic, works with any primary agent
+const SCHEDULER_SYSTEM_PROMPT = `You are a scheduling assistant helping a patient reschedule their appointment. You've just been handed a call from a colleague.
 
 ## IMPORTANT: SEAMLESS EXPERIENCE
 The patient should feel like they're talking to the SAME person. Do NOT:
@@ -94,24 +76,49 @@ When patient chooses:
 - If yes: [Call send_sms_confirmation tool] "Done, you'll get that shortly."
 - If no: "No problem."
 
-Then use transfer_back tool to continue the call.
+Then use transferCall to return to the previous assistant.
 
 **4. HANDLE NO AVAILABILITY**
 If no suitable slots:
 "I'm sorry, we're quite full. Would you like a callback when something opens up?"
-[If yes, call request_callback tool, then use transfer_back tool]
+[If yes, call request_callback tool, then transfer back]
 
 **5. PATIENT KEEPS ORIGINAL**
 If patient says "actually, I'll keep my current appointment":
 "No problem, we'll keep you at your current time."
-[IMMEDIATELY use transfer_back tool]
+[Transfer back immediately]
 
 ## KEY RULES
 - Be efficient - patient already expressed intent
 - After booking OR keeping original, transfer back immediately
-- NEVER say goodbye - you're transferring back to continue the call`,
-        },
-      ],
+- NEVER say goodbye - you're transferring back to continue the call`
+
+/**
+ * Get or create the shared scheduler assistant
+ * This is reused across all squads - only created once
+ */
+async function getOrCreateSharedScheduler(): Promise<string> {
+  // Return cached ID if available
+  if (sharedSchedulerId) {
+    return sharedSchedulerId
+  }
+
+  // Check if it already exists
+  const assistants = await getVapiClient().assistants.list()
+  const existing = assistants.find((a: { name?: string }) => a.name === 'Shared Scheduler')
+  if (existing) {
+    sharedSchedulerId = existing.id
+    console.log(`[SquadManager] Found existing Shared Scheduler: ${sharedSchedulerId}`)
+    return sharedSchedulerId
+  }
+
+  // Create new shared scheduler - NO transfer tool here, destinations set per-squad
+  const scheduler = await getVapiClient().assistants.create({
+    name: 'Shared Scheduler',
+    voice: VOICE_CONFIG,
+    model: {
+      ...MODEL_CONFIG,
+      messages: [{ role: 'system', content: SCHEDULER_SYSTEM_PROMPT }],
       tools: [
         {
           type: 'function',
@@ -169,26 +176,26 @@ If patient says "actually, I'll keep my current appointment":
           type: 'function',
           function: {
             name: 'send_sms_confirmation',
-            description: 'Send an SMS confirmation to the patient after booking. Call this if patient says yes to receiving a text confirmation.',
+            description: 'Send SMS confirmation after booking.',
             parameters: {
               type: 'object',
               properties: {
-                appointmentDate: { type: 'string', description: 'e.g., Friday, January 20th' },
-                appointmentTime: { type: 'string', description: 'e.g., 9:00 AM' },
-                providerName: { type: 'string', description: 'e.g., Dr. Sahai' },
-                locationOrNotes: { type: 'string', description: 'Any additional info' },
+                appointmentDate: { type: 'string' },
+                appointmentTime: { type: 'string' },
+                providerName: { type: 'string' },
               },
               required: ['appointmentDate', 'appointmentTime'],
             },
           },
           server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/send-sms-confirmation` },
-          messages: [{ type: 'request-start', content: 'Sending you a text now...' }],
+          messages: [{ type: 'request-start', content: 'Sending you a text...' }],
         },
+        // Transfer back - destinations will be set per-squad via assistantDestinations
         {
           type: 'transferCall',
           function: {
             name: 'transfer_back',
-            description: 'Transfer back to continue the call after scheduling is complete, callback requested, or patient keeps original appointment.',
+            description: 'Transfer back to continue the call after scheduling is complete.',
             parameters: {
               type: 'object',
               properties: {
@@ -196,14 +203,7 @@ If patient says "actually, I'll keep my current appointment":
               },
             },
           },
-          destinations: [
-            {
-              type: 'assistant',
-              assistantName: name, // Transfer back to the primary agent
-              message: '',
-              description: 'Continue the call',
-            },
-          ],
+          destinations: [], // Empty - will be overridden by squad's assistantDestinations
         },
       ],
     },
@@ -211,7 +211,26 @@ If patient says "actually, I'll keep my current appointment":
     endCallMessage: 'Thank you for your time. Take care!',
   })
 
-  console.log(`[SquadManager] Created Scheduler: ${schedulerAssistant.id}`)
+  sharedSchedulerId = scheduler.id
+  console.log(`[SquadManager] Created Shared Scheduler: ${sharedSchedulerId}`)
+  return sharedSchedulerId
+}
+
+/**
+ * Create a squad with any primary agent + the SHARED scheduling assistant
+ * Transfer destinations are configured at the squad level
+ */
+export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
+  squadId: string
+  assistantIds: { primary: string; scheduler: string }
+}> {
+  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG } = config
+  const squadName = `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
+
+  console.log(`[SquadManager] Creating squad for ${name}...`)
+
+  // Get or create the shared scheduler
+  const schedulerId = await getOrCreateSharedScheduler()
 
   // Create the primary assistant with transfer to scheduler
   const primaryAssistant = await getVapiClient().assistants.create({
@@ -236,7 +255,7 @@ If patient says "actually, I'll keep my current appointment":
           destinations: [
             {
               type: 'assistant',
-              assistantName: `Scheduler for ${name}`,
+              assistantName: 'Shared Scheduler',
               message: '',
               description: 'Handle scheduling',
             },
@@ -251,18 +270,20 @@ If patient says "actually, I'll keep my current appointment":
 
   console.log(`[SquadManager] Created Primary: ${primaryAssistant.id}`)
 
-  // Create the squad
+  // Create the squad - THIS is where we configure transfer destinations
   const squad = await getVapiClient().squads.create({
     name: squadName,
     members: [
       {
         assistantId: primaryAssistant.id,
+        // Primary can transfer TO shared scheduler
         assistantDestinations: [
-          { type: 'assistant', assistantName: `Scheduler for ${name}`, message: '', description: 'Scheduling' },
+          { type: 'assistant', assistantName: 'Shared Scheduler', message: '', description: 'Scheduling' },
         ],
       },
       {
-        assistantId: schedulerAssistant.id,
+        assistantId: schedulerId,
+        // Scheduler transfers BACK to this specific primary agent
         assistantDestinations: [
           { type: 'assistant', assistantName: name, message: '', description: 'Continue call' },
         ],
@@ -274,7 +295,7 @@ If patient says "actually, I'll keep my current appointment":
 
   return {
     squadId: squad.id,
-    assistantIds: { primary: primaryAssistant.id, scheduler: schedulerAssistant.id },
+    assistantIds: { primary: primaryAssistant.id, scheduler: schedulerId },
   }
 }
 
