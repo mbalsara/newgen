@@ -59,17 +59,22 @@ calls.post('/outbound', async (c) => {
       taskId: number
       agentId: string
       patientName: string
-      phoneNumberId: string
       customerNumber: string
     }>()
 
-    if (!body.taskId || !body.agentId || !body.patientName || !body.phoneNumberId || !body.customerNumber) {
+    if (!body.taskId || !body.agentId || !body.patientName || !body.customerNumber) {
       return c.json({
-        error: 'Missing required fields: taskId, agentId, patientName, phoneNumberId, customerNumber'
+        error: 'Missing required fields: taskId, agentId, patientName, customerNumber'
       }, 400)
     }
 
-    const result = await callService.startOutboundCall(body)
+    // Get VAPI phone number ID from environment (not from client)
+    const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID
+    if (!phoneNumberId) {
+      return c.json({ error: 'VAPI_PHONE_NUMBER_ID not configured' }, 500)
+    }
+
+    const result = await callService.startOutboundCall({ ...body, phoneNumberId })
 
     if ('error' in result) {
       return c.json({ error: result.error }, 400)

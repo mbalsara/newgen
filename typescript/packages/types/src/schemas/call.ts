@@ -38,12 +38,11 @@ export const CallStatusResponseSchema = z.object({
 })
 export type CallStatusResponse = z.infer<typeof CallStatusResponseSchema>
 
-// Start outbound call request
+// Start outbound call request (phoneNumberId is configured on backend via VAPI_PHONE_NUMBER_ID env)
 export const StartOutboundCallSchema = z.object({
   taskId: z.number(),
   agentId: z.string(),
   patientName: z.string(),
-  phoneNumberId: z.string(),
   customerNumber: z.string(),
 })
 export type StartOutboundCall = z.infer<typeof StartOutboundCallSchema>

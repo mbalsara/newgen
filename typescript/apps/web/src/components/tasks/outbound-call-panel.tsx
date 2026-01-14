@@ -8,10 +8,6 @@ import { api, type CallStatusResponse, type Agent } from '@/lib/api-client'
 import { useTasks } from '@/contexts/tasks-context'
 import type { Task } from '@/lib/task-types'
 
-// Default VAPI phone number ID (configured in VAPI dashboard)
-// This should be set in the environment or VAPI dashboard
-const VAPI_PHONE_NUMBER_ID = import.meta.env.VITE_VAPI_PHONE_NUMBER_ID || '8e1f0d5e-96e5-4f43-b4a3-3f2d8f3a9c1b'
-
 interface OutboundCallPanelProps {
   task: Task
   onClose: () => void
@@ -134,7 +130,6 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
         taskId: task.id,
         agentId: task.assignedAgent,
         patientName: task.patient.name,
-        phoneNumberId: VAPI_PHONE_NUMBER_ID,
         customerNumber: phoneNumber,
       })
 
@@ -236,18 +231,18 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   // Phone Input View
   if (callState === 'idle' || callState === 'failed') {
     return (
-      <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
+      <div className="flex-1 flex flex-col bg-gray-50">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
           <button
             onClick={onClose}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 mb-4"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Task
           </button>
-          <h2 className="text-lg font-semibold">Demo Call</h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h2 className="text-lg font-semibold text-gray-900">Demo Call</h2>
+          <p className="text-sm text-gray-500 mt-1">
             Patient: {task.patient.name}
           </p>
         </div>
@@ -256,33 +251,33 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
         <div className="flex-1 flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-sm space-y-6">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <Phone className="h-8 w-8 text-gray-400" />
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-500">
                 Enter a phone number to call. The AI agent will call this number and you can watch the conversation live.
               </p>
             </div>
 
             {/* Agent Info */}
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-              <div className="text-sm font-medium mb-1">Calling Agent</div>
+            <div className="bg-gray-100 rounded-lg p-4">
+              <div className="text-sm font-medium text-gray-700 mb-1">Calling Agent</div>
               <div className="flex items-center gap-2">
                 <span className="text-2xl">{agent?.avatar || '🤖'}</span>
                 <div>
-                  <div className="font-medium">{agent?.name || 'Unknown Agent'}</div>
-                  <div className="text-xs text-muted-foreground">{agent?.role || 'AI Agent'}</div>
+                  <div className="font-medium text-gray-900">{agent?.name || 'Unknown Agent'}</div>
+                  <div className="text-xs text-gray-500">{agent?.role || 'AI Agent'}</div>
                 </div>
               </div>
               {agent && !agent.vapiAssistantId && (
-                <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                <div className="mt-2 text-xs text-amber-600">
                   Note: This agent is not configured for outbound calls
                 </div>
               )}
             </div>
 
             {error && (
-              <div className="bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg">
+              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg">
                 {error}
               </div>
             )}
@@ -322,9 +317,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   const isNoAnswer = endedReason === 'customer-did-not-answer' || endedReason === 'customer-busy'
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -384,9 +379,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                 <>
                   <div className={cn(
                     'w-16 h-16 rounded-full flex items-center justify-center mb-4',
-                    reasonInfo.isSuccess || isVoicemail ? 'bg-green-100 dark:bg-green-900' :
-                    isNoAnswer ? 'bg-orange-100 dark:bg-orange-900' :
-                    'bg-gray-100 dark:bg-gray-800'
+                    reasonInfo.isSuccess || isVoicemail ? 'bg-green-100' :
+                    isNoAnswer ? 'bg-orange-100' :
+                    'bg-gray-100'
                   )}>
                     {reasonInfo.isSuccess || isVoicemail ? <CheckCircle className="h-8 w-8 text-green-600" /> :
                      isNoAnswer ? <PhoneMissed className="h-8 w-8 text-orange-600" /> :
@@ -399,9 +394,9 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                   {taskUpdateResult && (
                     <div className={cn(
                       'mt-4 p-3 rounded-lg text-sm max-w-xs',
-                      taskUpdateResult.action === 'completed' ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' :
-                      taskUpdateResult.action === 'flagged' ? 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300' :
-                      'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                      taskUpdateResult.action === 'completed' ? 'bg-green-50 text-green-700' :
+                      taskUpdateResult.action === 'flagged' ? 'bg-red-50 text-red-700' :
+                      'bg-amber-50 text-amber-700'
                     )}>
                       {taskUpdateResult.message}
                     </div>
@@ -423,7 +418,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
                   className={cn(
                     'max-w-[85%] p-3 rounded-lg',
                     msg.role === 'assistant'
-                      ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 mr-auto'
+                      ? 'bg-white border border-gray-200 mr-auto'
                       : 'bg-blue-500 text-white ml-auto'
                   )}
                 >
@@ -443,7 +438,7 @@ export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-4">
+      <div className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-center gap-4">
           {callState !== 'ended' ? (
             <Button
