@@ -63,15 +63,21 @@ export default function TasksPage() {
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
 
-  // Handle task selection from URL param
+  // Handle task selection from URL param - clear filters to show the task
   useEffect(() => {
     if (taskIdParam && !loading) {
       const taskId = parseInt(taskIdParam, 10)
-      if (!isNaN(taskId) && taskId !== selectedTaskId) {
-        selectTask(taskId)
+      if (!isNaN(taskId)) {
+        // Always clear filters when URL has a task ID, so the task is visible in left panel
+        if (filters.agent !== 'all' || filters.statuses.length > 0 || filters.search) {
+          setFilters({ statuses: [], agent: 'all', search: '' })
+        }
+        if (taskId !== selectedTaskId) {
+          selectTask(taskId)
+        }
       }
     }
-  }, [taskIdParam, loading, selectedTaskId, selectTask])
+  }, [taskIdParam, loading, selectTask, setFilters, filters.agent, filters.statuses.length, filters.search, selectedTaskId])
 
   // Handle navigation from Queue page with task ID in state
   useEffect(() => {
