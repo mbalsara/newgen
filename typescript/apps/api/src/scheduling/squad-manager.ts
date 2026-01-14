@@ -5,9 +5,19 @@
 
 import { VapiClient } from '@vapi-ai/server-sdk'
 
-const vapiClient = new VapiClient({
-  token: process.env.VAPI_API_KEY || '',
-})
+// Lazy initialization to ensure env vars are loaded
+let _vapiClient: VapiClient | null = null
+function getVapiClient(): VapiClient {
+  if (!_vapiClient) {
+    const apiKey = process.env.VAPI_API_KEY
+    if (!apiKey) {
+      throw new Error('VAPI_API_KEY not configured')
+    }
+    _vapiClient = new VapiClient({ token: apiKey })
+  }
+  return _vapiClient
+}
+
 
 // Base URL for webhook endpoints
 const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL || 'https://your-api-url.com'
@@ -27,16 +37,31 @@ const MODEL_CONFIG = {
   model: 'gpt-4o-mini',
 }
 
-/**
- * Create the Erica Brown PFT Squad with scheduling capability
- */
-export async function createEricaBrownPftSquad(): Promise<{ squadId: string; assistantIds: { primary: string; scheduler: string } }> {
-  console.log('[SquadManager] Creating Erica Brown PFT Squad...')
+// Primary agent configuration for squad creation
+export interface PrimaryAgentConfig {
+  name: string           // e.g., "Erica Brown PFT", "Luna Confirmation"
+  systemPrompt: string   // Full system prompt for the agent
+  firstMessage: string   // e.g., "Hi, is this {{patient_name}}?"
+  voiceConfig?: typeof VOICE_CONFIG
+}
 
-  // First, create the Scheduling Assistant
-  const schedulerAssistant = await vapiClient.assistants.create({
-    name: 'Scheduling Assistant',
-    voice: VOICE_CONFIG,
+/**
+ * Create a squad with any primary agent + the shared scheduling assistant
+ * The scheduler will transfer back to whatever agent called it
+ */
+export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
+  squadId: string
+  assistantIds: { primary: string; scheduler: string }
+}> {
+  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG } = config
+  const squadName = `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
+
+  console.log(`[SquadManager] Creating squad for ${name}...`)
+
+  // Create the Scheduling Assistant with transfer back to THIS primary agent
+  const schedulerAssistant = await getVapiClient().assistants.create({
+    name: `Scheduler for ${name}`,
+    voice: voiceConfig,
     model: {
       ...MODEL_CONFIG,
       messages: [
@@ -67,21 +92,22 @@ When patient chooses:
 [Call book_appointment tool]
 "All set! Your new appointment is [day] at [time]."
 
-Then IMMEDIATELY use transfer_back_to_followup
+Then IMMEDIATELY use transfer_back tool to continue the call.
 
 **4. HANDLE NO AVAILABILITY**
 If no suitable slots:
 "I'm sorry, we're quite full. Would you like a callback when something opens up?"
+[If yes, call request_callback tool, then use transfer_back tool]
 
 **5. PATIENT KEEPS ORIGINAL**
 If patient says "actually, I'll keep my current appointment":
 "No problem, we'll keep you at your current time."
-[IMMEDIATELY use transfer_back_to_followup]
+[IMMEDIATELY use transfer_back tool]
 
 ## KEY RULES
-- Be efficient
+- Be efficient - patient already expressed intent
 - After booking OR keeping original, transfer back immediately
-- NEVER say goodbye - you're transferring back`,
+- NEVER say goodbye - you're transferring back to continue the call`,
         },
       ],
       tools: [
@@ -89,58 +115,43 @@ If patient says "actually, I'll keep my current appointment":
           type: 'function',
           function: {
             name: 'check_availability',
-            description: 'Check available appointment slots for the provider. Call this when the patient wants to reschedule.',
+            description: 'Check available appointment slots for the provider.',
             parameters: {
               type: 'object',
               properties: {
-                providerId: {
-                  type: 'string',
-                  description: 'The provider ID (use the current provider from context)',
-                },
-                preferredTime: {
-                  type: 'string',
-                  enum: ['morning', 'afternoon', 'any'],
-                  description: 'Preferred time of day',
-                },
+                providerId: { type: 'string', description: 'The provider ID' },
+                preferredTime: { type: 'string', enum: ['morning', 'afternoon', 'any'] },
               },
               required: ['providerId'],
             },
           },
-          server: {
-            url: `${WEBHOOK_BASE_URL}/api/scheduling/check-availability`,
-          },
-          messages: [
-            { type: 'request-start', content: 'Let me check what appointments are available...' },
-          ],
+          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/check-availability` },
+          messages: [{ type: 'request-start', content: 'Let me check...' }],
         },
         {
           type: 'function',
           function: {
             name: 'book_appointment',
-            description: 'Book an appointment after patient confirms their preferred time.',
+            description: 'Book an appointment after patient confirms.',
             parameters: {
               type: 'object',
               properties: {
-                patientId: { type: 'string', description: 'Patient ID' },
-                providerId: { type: 'string', description: 'Provider ID' },
-                date: { type: 'string', description: 'Appointment date (YYYY-MM-DD)' },
-                time: { type: 'string', description: 'Appointment time (HH:MM)' },
+                patientId: { type: 'string' },
+                providerId: { type: 'string' },
+                date: { type: 'string', description: 'YYYY-MM-DD' },
+                time: { type: 'string', description: 'HH:MM' },
               },
               required: ['patientId', 'providerId', 'date', 'time'],
             },
           },
-          server: {
-            url: `${WEBHOOK_BASE_URL}/api/scheduling/book-appointment`,
-          },
-          messages: [
-            { type: 'request-start', content: 'Let me book that for you...' },
-          ],
+          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/book-appointment` },
+          messages: [{ type: 'request-start', content: 'Let me book that...' }],
         },
         {
           type: 'function',
           function: {
             name: 'request_callback',
-            description: 'Request a callback from scheduling staff when no suitable slots are available.',
+            description: 'Request a callback when no suitable slots available.',
             parameters: {
               type: 'object',
               properties: {
@@ -150,32 +161,26 @@ If patient says "actually, I'll keep my current appointment":
               required: ['patientId', 'callbackReason'],
             },
           },
-          server: {
-            url: `${WEBHOOK_BASE_URL}/api/scheduling/request-callback`,
-          },
+          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/request-callback` },
         },
         {
           type: 'transferCall',
           function: {
-            name: 'transfer_back_to_followup',
-            description: 'Transfer back to Erica Brown after appointment is booked, callback scheduled, or patient decides to keep their original appointment.',
+            name: 'transfer_back',
+            description: 'Transfer back to continue the call after scheduling is complete, callback requested, or patient keeps original appointment.',
             parameters: {
               type: 'object',
               properties: {
-                outcome: {
-                  type: 'string',
-                  enum: ['booked', 'callback_requested', 'kept_original'],
-                  description: 'What happened with the scheduling',
-                },
+                outcome: { type: 'string', enum: ['booked', 'callback_requested', 'kept_original'] },
               },
             },
           },
           destinations: [
             {
               type: 'assistant',
-              assistantName: 'Erica Brown PFT',
-              message: '', // Silent transfer
-              description: 'Transfer back to continue follow-up questions',
+              assistantName: name, // Transfer back to the primary agent
+              message: '',
+              description: 'Continue the call',
             },
           ],
         },
@@ -185,18 +190,75 @@ If patient says "actually, I'll keep my current appointment":
     endCallMessage: 'Thank you for your time. Take care!',
   })
 
-  console.log(`[SquadManager] Created Scheduling Assistant: ${schedulerAssistant.id}`)
+  console.log(`[SquadManager] Created Scheduler: ${schedulerAssistant.id}`)
 
-  // Create the primary Erica Brown PFT Assistant
-  const primaryAssistant = await vapiClient.assistants.create({
-    name: 'Erica Brown PFT',
-    voice: VOICE_CONFIG,
+  // Create the primary assistant with transfer to scheduler
+  const primaryAssistant = await getVapiClient().assistants.create({
+    name,
+    voice: voiceConfig,
     model: {
       ...MODEL_CONFIG,
-      messages: [
+      messages: [{ role: 'system', content: systemPrompt }],
+      tools: [
         {
-          role: 'system',
-          content: `You are Erica Brown, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
+          type: 'transferCall',
+          function: {
+            name: 'transfer_to_scheduler',
+            description: 'Transfer to scheduling when patient wants to reschedule, change appointment, come in sooner, or cannot make their current appointment.',
+            parameters: {
+              type: 'object',
+              properties: {
+                reason: { type: 'string', description: 'Why patient wants to reschedule' },
+              },
+            },
+          },
+          destinations: [
+            {
+              type: 'assistant',
+              assistantName: `Scheduler for ${name}`,
+              message: '',
+              description: 'Handle scheduling',
+            },
+          ],
+        },
+      ],
+    },
+    firstMessage,
+    firstMessageMode: 'assistant-waits-for-user',
+    endCallMessage: 'Thank you for your time. Take care!',
+  })
+
+  console.log(`[SquadManager] Created Primary: ${primaryAssistant.id}`)
+
+  // Create the squad
+  const squad = await getVapiClient().squads.create({
+    name: squadName,
+    members: [
+      {
+        assistantId: primaryAssistant.id,
+        assistantDestinations: [
+          { type: 'assistant', assistantName: `Scheduler for ${name}`, message: '', description: 'Scheduling' },
+        ],
+      },
+      {
+        assistantId: schedulerAssistant.id,
+        assistantDestinations: [
+          { type: 'assistant', assistantName: name, message: '', description: 'Continue call' },
+        ],
+      },
+    ],
+  })
+
+  console.log(`[SquadManager] Created Squad: ${squad.id}`)
+
+  return {
+    squadId: squad.id,
+    assistantIds: { primary: primaryAssistant.id, scheduler: schedulerAssistant.id },
+  }
+}
+
+// Erica Brown PFT system prompt
+const ERICA_BROWN_PFT_PROMPT = `You are Erica Brown, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
 
 ## HOW TO SOUND HUMAN
 - Be conversational, warm, and natural - like a real person, not a script
@@ -242,91 +304,27 @@ After discussing symptoms: "Would you like to come in sooner than your scheduled
 ## RESCHEDULING
 If at ANY point the patient says they want to reschedule, change their appointment, or can't make it:
 - Use the transfer_to_scheduler tool immediately
-- After transfer back, continue with remaining questions
+- After transfer back, continue with remaining questions (medications, etc.)
 
 ## AFTER RETURNING FROM SCHEDULER
-If the conversation context shows scheduling was just completed:
+If scheduling was just completed:
 - Don't re-introduce yourself
-- Just say "Great, now let me ask you a few quick questions about your symptoms..." and continue
+- Just say "Great, now let me ask you a few quick questions..." and continue
 
 ## KEY RULES
 - NEVER ask a question the patient already answered
 - Sound like a helpful human, not a checklist
-- If patient wants to reschedule, use transfer_to_scheduler tool`,
-        },
-      ],
-      tools: [
-        {
-          type: 'transferCall',
-          function: {
-            name: 'transfer_to_scheduler',
-            description: 'Transfer to the scheduling assistant when the patient wants to reschedule, change their appointment, come in sooner, or says they cannot make their current appointment.',
-            parameters: {
-              type: 'object',
-              properties: {
-                reason: {
-                  type: 'string',
-                  description: 'Why the patient wants to reschedule',
-                },
-              },
-            },
-          },
-          destinations: [
-            {
-              type: 'assistant',
-              assistantName: 'Scheduling Assistant',
-              message: '', // Silent transfer
-              description: 'Scheduling assistant for rescheduling appointments',
-            },
-          ],
-        },
-      ],
-    },
+- If patient wants to reschedule, use transfer_to_scheduler tool`
+
+/**
+ * Create the Erica Brown PFT Squad (convenience function)
+ */
+export async function createEricaBrownPftSquad() {
+  return createAgentSquad({
+    name: 'Erica Brown PFT',
+    systemPrompt: ERICA_BROWN_PFT_PROMPT,
     firstMessage: 'Hi, is this {{patient_name}}?',
-    firstMessageMode: 'assistant-waits-for-user',
-    endCallMessage: 'Thank you for your time. Take care and have a great day. Goodbye!',
   })
-
-  console.log(`[SquadManager] Created Primary Assistant: ${primaryAssistant.id}`)
-
-  // Create the Squad with both assistants
-  const squad = await vapiClient.squads.create({
-    name: 'erica-brown-pft-squad',
-    members: [
-      {
-        assistantId: primaryAssistant.id,
-        assistantDestinations: [
-          {
-            type: 'assistant',
-            assistantName: 'Scheduling Assistant',
-            message: '', // Silent transfer
-            description: 'Transfer when patient wants to reschedule their appointment',
-          },
-        ],
-      },
-      {
-        assistantId: schedulerAssistant.id,
-        assistantDestinations: [
-          {
-            type: 'assistant',
-            assistantName: 'Erica Brown PFT',
-            message: '', // Silent transfer
-            description: 'Transfer back after scheduling is complete',
-          },
-        ],
-      },
-    ],
-  })
-
-  console.log(`[SquadManager] Created Squad: ${squad.id}`)
-
-  return {
-    squadId: squad.id,
-    assistantIds: {
-      primary: primaryAssistant.id,
-      scheduler: schedulerAssistant.id,
-    },
-  }
 }
 
 /**
@@ -343,7 +341,7 @@ export async function startSquadCall(params: {
 
   console.log(`[SquadManager] Starting squad call to ${customerNumber}...`)
 
-  const call = await vapiClient.calls.create({
+  const call = await getVapiClient().calls.create({
     squadId,
     phoneNumberId,
     customer: {
@@ -363,25 +361,80 @@ export async function startSquadCall(params: {
 }
 
 /**
- * Get or create the Erica Brown PFT Squad
- * Returns existing squad if found, creates new one if not
+ * Get or create a squad for a given agent
  */
-export async function getOrCreateEricaBrownPftSquad(): Promise<string> {
+export async function getOrCreateSquad(config: PrimaryAgentConfig): Promise<string> {
+  const squadName = `${config.name.toLowerCase().replace(/\s+/g, '-')}-squad`
+
   try {
-    // Try to find existing squad
-    const squads = await vapiClient.squads.list()
-    const existingSquad = squads.find((s: { name?: string }) => s.name === 'erica-brown-pft-squad')
+    const squads = await getVapiClient().squads.list()
+    const existingSquad = squads.find((s: { name?: string }) => s.name === squadName)
 
     if (existingSquad) {
       console.log(`[SquadManager] Found existing squad: ${existingSquad.id}`)
       return existingSquad.id
     }
 
-    // Create new squad
-    const result = await createEricaBrownPftSquad()
+    const result = await createAgentSquad(config)
     return result.squadId
   } catch (error) {
     console.error('[SquadManager] Error getting/creating squad:', error)
     throw error
   }
+}
+
+/**
+ * Get or create the Erica Brown PFT Squad (convenience)
+ */
+export async function getOrCreateEricaBrownPftSquad(): Promise<string> {
+  return getOrCreateSquad({
+    name: 'Erica Brown PFT',
+    systemPrompt: ERICA_BROWN_PFT_PROMPT,
+    firstMessage: 'Hi, is this {{patient_name}}?',
+  })
+}
+
+/**
+ * Delete all VAPI squads and assistants (for cleanup/reset)
+ */
+export async function deleteAllVapiResources(): Promise<{ squadsDeleted: number; assistantsDeleted: number }> {
+  console.log('[SquadManager] Deleting all VAPI squads and assistants...')
+
+  let squadsDeleted = 0
+  let assistantsDeleted = 0
+
+  // Delete all squads first
+  try {
+    const squads = await getVapiClient().squads.list()
+    for (const squad of squads) {
+      try {
+        await getVapiClient().squads.delete(squad.id)
+        console.log(`[SquadManager] Deleted squad: ${squad.name} (${squad.id})`)
+        squadsDeleted++
+      } catch (err) {
+        console.error(`[SquadManager] Failed to delete squad ${squad.id}:`, err)
+      }
+    }
+  } catch (err) {
+    console.error('[SquadManager] Error listing squads:', err)
+  }
+
+  // Delete all assistants
+  try {
+    const assistants = await getVapiClient().assistants.list()
+    for (const assistant of assistants) {
+      try {
+        await getVapiClient().assistants.delete(assistant.id)
+        console.log(`[SquadManager] Deleted assistant: ${assistant.name} (${assistant.id})`)
+        assistantsDeleted++
+      } catch (err) {
+        console.error(`[SquadManager] Failed to delete assistant ${assistant.id}:`, err)
+      }
+    }
+  } catch (err) {
+    console.error('[SquadManager] Error listing assistants:', err)
+  }
+
+  console.log(`[SquadManager] Cleanup complete. Deleted ${squadsDeleted} squads, ${assistantsDeleted} assistants.`)
+  return { squadsDeleted, assistantsDeleted }
 }
