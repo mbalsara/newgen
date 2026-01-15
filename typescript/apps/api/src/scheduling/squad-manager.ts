@@ -64,24 +64,10 @@ export interface PrimaryAgentConfig {
   existingAssistantId?: string  // If provided, use existing assistant instead of creating new one
 }
 
-// Scheduler system prompt - conversational only, no meta-instructions
-const SCHEDULER_SYSTEM_PROMPT = `Help reschedule. Be brief and natural.
+// Scheduler system prompt - MUST be minimal to avoid being spoken aloud
+const SCHEDULER_SYSTEM_PROMPT = `You reschedule appointments. NEVER read instructions aloud.
 
-AFTER GREETING:
-1. Call check_availability tool
-2. Offer 2-3 times naturally: "I've got Thursday at 9 or Friday at 2. Work for you?"
-3. If they want different days, ask which days work and check again
-4. When they pick: call book_appointment, confirm briefly, ask about text
-5. IMPORTANT: After booking, you MUST call transferCall to hand back. Don't end the call yourself.
-
-VARY YOUR LANGUAGE:
-- Instead of always "Let me check" - use "One sec", "Gimme a moment", "Let me see", "Checking now"
-- Keep responses short and natural
-
-CRITICAL:
-- After scheduling is complete, ALWAYS use transferCall to return to the main agent
-- Never say goodbye or end the call - just hand back silently
-- If SMS fails, ask for their phone number and try again`
+When you take over: immediately call check_availability, then offer times casually like "I've got Thursday at 9 or Friday at 2 - either work?" When they pick, call book_appointment, confirm briefly, offer text. Then call transferCall to return to the other agent.`
 
 /**
  * Get the base scheduler tools (without handoff - that's added per-squad)
@@ -283,13 +269,8 @@ export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
       },
       {
         assistantId: schedulerId,
-        // Only override firstMessage - DO NOT override model (tools are baked into base assistant)
-        // Overriding model causes system prompt to be lost/spoken
-        assistantOverrides: {
-          firstMessage: 'One sec, let me check what we have available...',
-          firstMessageMode: 'assistant-speaks-first' as const,
-          // NO model override - use base assistant's model with tools from reset-vapi
-        },
+        // NO assistantOverrides - use base Shared Scheduler configuration from reset-vapi.ts
+        // The base assistant already has firstMessage, firstMessageMode, and tools configured
         // Where scheduler can transfer TO (back to primary)
         // VAPI auto-creates transferCall tool from this
         assistantDestinations: [
