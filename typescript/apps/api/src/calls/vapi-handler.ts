@@ -181,15 +181,22 @@ export interface VapiCallStatus {
 
 // VAPI API calls using official SDK
 export const vapiApi = {
-  // Start an outbound call
+  // Start an outbound call - supports either assistantId OR squadId
   async startCall(params: {
-    assistantId: string
+    assistantId?: string
+    squadId?: string
     phoneNumber: string
     customerNumber: string
     assistantOverrides?: Vapi.AssistantOverrides
+    variableValues?: Record<string, string>
   }): Promise<{ id: string; status: string } | null> {
     try {
       const client = getVapiClient()
+
+      if (!params.assistantId && !params.squadId) {
+        console.error('Either assistantId or squadId is required')
+        return null
+      }
 
       // Validate and format phone number to E.164
       const phoneResult = validateAndFormatPhone(params.customerNumber)
@@ -211,23 +218,41 @@ export const vapiApi = {
       }
 
       // Build request using SDK types
-      const callRequest: Vapi.CreateCallDto = {
-        assistantId: params.assistantId,
-        phoneNumberId: params.phoneNumber,
-        customer: {
-          number: phoneResult.e164,
-        },
-        assistantOverrides,
-      }
+      // Use squadId if provided, otherwise assistantId
+      const callRequest: Vapi.CreateCallDto = params.squadId
+        ? {
+            squadId: params.squadId,
+            phoneNumberId: params.phoneNumber,
+            customer: {
+              number: phoneResult.e164,
+            },
+            // For squads, pass variable values for template substitution
+            assistantOverrides: params.variableValues
+              ? { ...assistantOverrides, variableValues: params.variableValues }
+              : assistantOverrides,
+          }
+        : {
+            assistantId: params.assistantId,
+            phoneNumberId: params.phoneNumber,
+            customer: {
+              number: phoneResult.e164,
+            },
+            assistantOverrides,
+          }
 
+      console.log('[VAPI SDK] Creating call with request:', JSON.stringify(callRequest, null, 2))
       const response = await client.calls.create(callRequest)
       // Response can be Call or CallBatchResponse, we expect Call for single call
       const call = response as Vapi.Call
-      console.log('[VAPI SDK] Call created:', call.id)
+      console.log('[VAPI SDK] Call created:', call.id, params.squadId ? `(squad: ${params.squadId})` : `(assistant: ${params.assistantId})`)
 
       return { id: call.id, status: call.status || 'queued' }
     } catch (error) {
       console.error('VAPI start call error:', error)
+      // Log more details if it's a VAPI error
+      if (error && typeof error === 'object' && 'body' in error) {
+        console.error('VAPI error body:', JSON.stringify((error as { body: unknown }).body, null, 2))
+      }
       return null
     }
   },

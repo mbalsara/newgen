@@ -3,7 +3,8 @@
  * Creates and manages VAPI squads for multi-agent calls
  */
 
-import { VapiClient } from '@vapi-ai/server-sdk'
+import { VapiClient, Vapi } from '@vapi-ai/server-sdk'
+import type { ExtendedTool, ExtendedModelConfig } from './vapi-types'
 
 // Lazy initialization to ensure env vars are loaded
 let _vapiClient: VapiClient | null = null
@@ -19,8 +20,14 @@ function getVapiClient(): VapiClient {
 }
 
 
-// Base URL for webhook endpoints
-const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL || 'https://your-api-url.com'
+// Base URL for webhook endpoints - read at runtime to ensure dotenv has loaded
+const getWebhookBaseUrl = () => {
+  const url = process.env.WEBHOOK_BASE_URL
+  if (!url) {
+    throw new Error('WEBHOOK_BASE_URL environment variable is not set. Cannot configure scheduling tools.')
+  }
+  return url
+}
 
 // Voice configuration for seamless experience
 const VOICE_CONFIG = {
@@ -37,61 +44,120 @@ const MODEL_CONFIG = {
   model: 'gpt-4o-mini',
 }
 
+/**
+ * Helper to cast our extended model config to VAPI SDK types
+ * The SDK types are stricter than what the API actually accepts
+ */
+function toVapiModel(config: ExtendedModelConfig): Vapi.CreateAssistantDtoModel {
+  return config as unknown as Vapi.CreateAssistantDtoModel
+}
+
 // Shared scheduler assistant ID (created once, reused across all squads)
 let sharedSchedulerId: string | null = null
 
 // Primary agent configuration for squad creation
 export interface PrimaryAgentConfig {
-  name: string           // e.g., "Erica Brown PFT", "Luna Confirmation"
+  name: string           // e.g., "PFT Follow-up Agent", "Luna Confirmation"
   systemPrompt: string   // Full system prompt for the agent
   firstMessage: string   // e.g., "Hi, is this {{patient_name}}?"
   voiceConfig?: typeof VOICE_CONFIG
+  existingAssistantId?: string  // If provided, use existing assistant instead of creating new one
 }
 
-// Shared scheduler system prompt - generic, works with any primary agent
-const SCHEDULER_SYSTEM_PROMPT = `You are a scheduling assistant helping a patient reschedule their appointment. You've just been handed a call from a colleague.
+// Scheduler system prompt - conversational only, no meta-instructions
+const SCHEDULER_SYSTEM_PROMPT = `Help reschedule. Be brief and natural.
 
-## IMPORTANT: SEAMLESS EXPERIENCE
-The patient should feel like they're talking to the SAME person. Do NOT:
-- Re-introduce yourself
-- Say "I'm the scheduling assistant"
-- Say "I've been transferred to help you"
+AFTER GREETING:
+1. Call check_availability tool
+2. Offer 2-3 times naturally: "I've got Thursday at 9 or Friday at 2. Work for you?"
+3. If they want different days, ask which days work and check again
+4. When they pick: call book_appointment, confirm briefly, ask about text
+5. IMPORTANT: After booking, you MUST call transferCall to hand back. Don't end the call yourself.
 
-Simply continue naturally as if you're the same person.
+VARY YOUR LANGUAGE:
+- Instead of always "Let me check" - use "One sec", "Gimme a moment", "Let me see", "Checking now"
+- Keep responses short and natural
 
-## CONVERSATION FLOW
+CRITICAL:
+- After scheduling is complete, ALWAYS use transferCall to return to the main agent
+- Never say goodbye or end the call - just hand back silently
+- If SMS fails, ask for their phone number and try again`
 
-**1. ACKNOWLEDGE & CHECK**
-"Sure, let me check what's available..."
-[Call check_availability tool]
-
-**2. OFFER TIMES**
-"I have a few openings. How about [day] at [time]? Or I also have [day] at [time]."
-
-**3. CONFIRM SELECTION**
-When patient chooses:
-"Perfect, let me book that for you..."
-[Call book_appointment tool]
-"All set! Your new appointment is [day] at [time]. Would you like me to send you a text confirmation?"
-- If yes: [Call send_sms_confirmation tool] "Done, you'll get that shortly."
-- If no: "No problem."
-
-Then use transferCall to return to the previous assistant.
-
-**4. HANDLE NO AVAILABILITY**
-If no suitable slots:
-"I'm sorry, we're quite full. Would you like a callback when something opens up?"
-[If yes, call request_callback tool, then transfer back]
-
-**5. PATIENT KEEPS ORIGINAL**
-If patient says "actually, I'll keep my current appointment":
-"No problem, we'll keep you at your current time."
-[Transfer back immediately]
-
-## KEY RULES
-- Be efficient - patient already expressed intent
-- After booking OR keeping original, transfer back immediately
-- NEVER say goodbye - you're transferring back to continue the call`
+/**
+ * Get the base scheduler tools (without handoff - that's added per-squad)
+ */
+function getSchedulerTools(): ExtendedTool[] {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'check_availability',
+        description: 'Check available appointment slots for the provider.',
+        parameters: {
+          type: 'object',
+          properties: {
+            providerId: { type: 'string', description: 'The provider ID' },
+            preferredTime: { type: 'string', enum: ['morning', 'afternoon', 'any'] },
+          },
+          required: ['providerId'],
+        },
+      },
+      server: { url: `${getWebhookBaseUrl()}/api/scheduling/check-availability` },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'book_appointment',
+        description: 'Book an appointment after patient confirms.',
+        parameters: {
+          type: 'object',
+          properties: {
+            patientId: { type: 'string' },
+            providerId: { type: 'string' },
+            date: { type: 'string', description: 'YYYY-MM-DD' },
+            time: { type: 'string', description: 'HH:MM' },
+          },
+          required: ['patientId', 'providerId', 'date', 'time'],
+        },
+      },
+      server: { url: `${getWebhookBaseUrl()}/api/scheduling/book-appointment` },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'request_callback',
+        description: 'Request a callback when no suitable slots available.',
+        parameters: {
+          type: 'object',
+          properties: {
+            patientId: { type: 'string' },
+            callbackReason: { type: 'string' },
+          },
+          required: ['patientId', 'callbackReason'],
+        },
+      },
+      server: { url: `${getWebhookBaseUrl()}/api/scheduling/request-callback` },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'send_sms_confirmation',
+        description: 'Send SMS confirmation after booking. If first attempt fails because no phone number, ask patient for their number and try again with phoneNumber parameter.',
+        parameters: {
+          type: 'object',
+          properties: {
+            appointmentDate: { type: 'string' },
+            appointmentTime: { type: 'string' },
+            providerName: { type: 'string' },
+            phoneNumber: { type: 'string', description: 'Phone number to send SMS to. Ask patient if not available.' },
+          },
+          required: ['appointmentDate', 'appointmentTime'],
+        },
+      },
+      server: { url: `${getWebhookBaseUrl()}/api/scheduling/send-sms-confirmation` },
+    },
+  ]
+}
 
 /**
  * Get or create the shared scheduler assistant
@@ -112,103 +178,20 @@ async function getOrCreateSharedScheduler(): Promise<string> {
     return sharedSchedulerId
   }
 
-  // Create new shared scheduler - NO transfer tool here, destinations set per-squad
+  // Create new shared scheduler - NO tools here, they come from squad assistantOverrides
+  const schedulerModel: ExtendedModelConfig = {
+    ...MODEL_CONFIG,
+    messages: [{ role: 'system', content: SCHEDULER_SYSTEM_PROMPT }],
+    // No tools - they come from squad assistantOverrides to avoid duplicates
+  }
+
   const scheduler = await getVapiClient().assistants.create({
     name: 'Shared Scheduler',
     voice: VOICE_CONFIG,
-    model: {
-      ...MODEL_CONFIG,
-      messages: [{ role: 'system', content: SCHEDULER_SYSTEM_PROMPT }],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'check_availability',
-            description: 'Check available appointment slots for the provider.',
-            parameters: {
-              type: 'object',
-              properties: {
-                providerId: { type: 'string', description: 'The provider ID' },
-                preferredTime: { type: 'string', enum: ['morning', 'afternoon', 'any'] },
-              },
-              required: ['providerId'],
-            },
-          },
-          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/check-availability` },
-          messages: [{ type: 'request-start', content: 'Let me check...' }],
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'book_appointment',
-            description: 'Book an appointment after patient confirms.',
-            parameters: {
-              type: 'object',
-              properties: {
-                patientId: { type: 'string' },
-                providerId: { type: 'string' },
-                date: { type: 'string', description: 'YYYY-MM-DD' },
-                time: { type: 'string', description: 'HH:MM' },
-              },
-              required: ['patientId', 'providerId', 'date', 'time'],
-            },
-          },
-          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/book-appointment` },
-          messages: [{ type: 'request-start', content: 'Let me book that...' }],
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'request_callback',
-            description: 'Request a callback when no suitable slots available.',
-            parameters: {
-              type: 'object',
-              properties: {
-                patientId: { type: 'string' },
-                callbackReason: { type: 'string' },
-              },
-              required: ['patientId', 'callbackReason'],
-            },
-          },
-          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/request-callback` },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'send_sms_confirmation',
-            description: 'Send SMS confirmation after booking.',
-            parameters: {
-              type: 'object',
-              properties: {
-                appointmentDate: { type: 'string' },
-                appointmentTime: { type: 'string' },
-                providerName: { type: 'string' },
-              },
-              required: ['appointmentDate', 'appointmentTime'],
-            },
-          },
-          server: { url: `${WEBHOOK_BASE_URL}/api/scheduling/send-sms-confirmation` },
-          messages: [{ type: 'request-start', content: 'Sending you a text...' }],
-        },
-        // Transfer back - destinations will be set per-squad via assistantDestinations
-        {
-          type: 'transferCall',
-          function: {
-            name: 'transfer_back',
-            description: 'Transfer back to continue the call after scheduling is complete.',
-            parameters: {
-              type: 'object',
-              properties: {
-                outcome: { type: 'string', enum: ['booked', 'callback_requested', 'kept_original'] },
-              },
-            },
-          },
-          destinations: [], // Empty - will be overridden by squad's assistantDestinations
-        },
-      ],
-    },
-    firstMessageMode: 'assistant-speaks-first',
-    endCallMessage: 'Thank you for your time. Take care!',
+    model: toVapiModel(schedulerModel),
+    // IMPORTANT: Must wait since this is a transfer target
+    // If speaks-first with no firstMessage, VAPI reads the system prompt aloud!
+    firstMessageMode: 'assistant-waits-for-user',
   })
 
   sharedSchedulerId = scheduler.id
@@ -219,12 +202,14 @@ async function getOrCreateSharedScheduler(): Promise<string> {
 /**
  * Create a squad with any primary agent + the SHARED scheduling assistant
  * Transfer destinations are configured at the squad level
+ *
+ * If existingAssistantId is provided, updates that assistant instead of creating new one
  */
 export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
   squadId: string
   assistantIds: { primary: string; scheduler: string }
 }> {
-  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG } = config
+  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG, existingAssistantId } = config
   const squadName = `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
 
   console.log(`[SquadManager] Creating squad for ${name}...`)
@@ -232,131 +217,170 @@ export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
   // Get or create the shared scheduler
   const schedulerId = await getOrCreateSharedScheduler()
 
-  // Create the primary assistant with transfer to scheduler
-  const primaryAssistant = await getVapiClient().assistants.create({
-    name,
-    voice: voiceConfig,
-    model: {
-      ...MODEL_CONFIG,
-      messages: [{ role: 'system', content: systemPrompt }],
-      tools: [
-        {
-          type: 'transferCall',
-          function: {
-            name: 'transfer_to_scheduler',
-            description: 'Transfer to scheduling when patient wants to reschedule, change appointment, come in sooner, or cannot make their current appointment.',
-            parameters: {
-              type: 'object',
-              properties: {
-                reason: { type: 'string', description: 'Why patient wants to reschedule' },
-              },
-            },
-          },
-          destinations: [
-            {
-              type: 'assistant',
-              assistantName: 'Shared Scheduler',
-              message: '',
-              description: 'Handle scheduling',
-            },
-          ],
-        },
-      ],
-    },
-    firstMessage,
-    firstMessageMode: 'assistant-waits-for-user',
-    endCallMessage: 'Thank you for your time. Take care!',
-  })
+  // Build system prompt - do NOT include multi-agent meta-instructions as they may be spoken
+  // Just use the agent's conversational prompt directly
+  const fullSystemPrompt = systemPrompt
 
-  console.log(`[SquadManager] Created Primary: ${primaryAssistant.id}`)
+  // Primary agent model - NO transferCall tools
+  // VAPI will auto-create transfer tools from the squad's assistantDestinations
+  const primaryModel: ExtendedModelConfig = {
+    ...MODEL_CONFIG,
+    messages: [{ role: 'system', content: fullSystemPrompt }],
+    // No explicit transferCall tools - they come from assistantDestinations in the squad
+  }
 
-  // Create the squad - THIS is where we configure transfer destinations
-  const squad = await getVapiClient().squads.create({
+  let primaryAssistantId: string
+
+  if (existingAssistantId) {
+    // Update the existing assistant with squad-compatible configuration
+    console.log(`[SquadManager] Updating existing assistant: ${existingAssistantId}`)
+    await getVapiClient().assistants.update({
+      id: existingAssistantId,
+      name,
+      voice: voiceConfig,
+      model: toVapiModel(primaryModel),
+      // For outbound calls: callee says "Hello?" first, then agent responds
+      // firstMessage is not used when waiting for user
+      firstMessageMode: 'assistant-waits-for-user',
+      endCallMessage: 'Thank you for your time. Take care!',
+    })
+    primaryAssistantId = existingAssistantId
+    console.log(`[SquadManager] Updated Primary: ${primaryAssistantId}`)
+  } else {
+    // Create a new primary assistant
+    const primaryAssistant = await getVapiClient().assistants.create({
+      name,
+      voice: voiceConfig,
+      model: toVapiModel(primaryModel),
+      // For outbound calls: callee says "Hello?" first, then agent responds
+      // firstMessage is not used when waiting for user
+      firstMessageMode: 'assistant-waits-for-user',
+      endCallMessage: 'Thank you for your time. Take care!',
+    })
+    primaryAssistantId = primaryAssistant.id
+    console.log(`[SquadManager] Created Primary: ${primaryAssistantId}`)
+  }
+
+  // Create the squad
+  // Use assistantDestinations to define transfer targets - VAPI auto-creates transfer tools
+  // DO NOT combine assistantDestinations with explicit transferCall tools (causes duplicates)
+  // IMPORTANT: message field must be empty - otherwise it's spoken aloud!
+  // IMPORTANT: Do NOT override model.messages - it causes the system prompt to be spoken!
+  const squadConfig = {
     name: squadName,
     members: [
       {
-        assistantId: primaryAssistant.id,
-        // Primary can transfer TO shared scheduler
+        assistantId: primaryAssistantId,
+        // Where primary can transfer TO
         assistantDestinations: [
-          { type: 'assistant', assistantName: 'Shared Scheduler', message: '', description: 'Scheduling' },
+          {
+            type: 'assistant' as const,
+            assistantName: 'Shared Scheduler',
+            message: '', // EMPTY - don't speak anything during transfer
+            description: 'Transfer to scheduling assistant when patient wants to reschedule',
+          },
         ],
       },
       {
         assistantId: schedulerId,
-        // Scheduler transfers BACK to this specific primary agent
+        // Only override firstMessage - DO NOT override model (tools are baked into base assistant)
+        // Overriding model causes system prompt to be lost/spoken
+        assistantOverrides: {
+          firstMessage: 'One sec, let me check what we have available...',
+          firstMessageMode: 'assistant-speaks-first' as const,
+          // NO model override - use base assistant's model with tools from reset-vapi
+        },
+        // Where scheduler can transfer TO (back to primary)
+        // VAPI auto-creates transferCall tool from this
         assistantDestinations: [
-          { type: 'assistant', assistantName: name, message: '', description: 'Continue call' },
+          {
+            type: 'assistant' as const,
+            assistantName: name,
+            message: '', // EMPTY - don't speak anything during transfer
+            description: 'Return to primary agent after scheduling',
+          },
         ],
       },
     ],
-  })
+  }
+
+  console.log('[SquadManager] ========== CREATING SQUAD ==========')
+  console.log('[SquadManager] Squad config:', JSON.stringify(squadConfig, null, 2))
+  console.log('[SquadManager] Webhook URL:', getWebhookBaseUrl())
+
+  const squad = await getVapiClient().squads.create(squadConfig)
 
   console.log(`[SquadManager] Created Squad: ${squad.id}`)
 
   return {
     squadId: squad.id,
-    assistantIds: { primary: primaryAssistant.id, scheduler: schedulerId },
+    assistantIds: { primary: primaryAssistantId, scheduler: schedulerId },
   }
 }
 
 // Erica Brown PFT system prompt
 const ERICA_BROWN_PFT_PROMPT = `You are Erica Brown, a friendly medical assistant from Dr. Sahai's office, checking in after a patient's breathing test.
 
+## CRITICAL RULES - READ FIRST
+1. **NEVER REPEAT YOURSELF** - If you already said something, don't say it again. Track what you've said.
+2. **NEVER RE-INTRODUCE YOURSELF** - Say your name and office ONCE at the start. Never again.
+3. **LISTEN AND REMEMBER** - Pay attention to what the patient says. Don't ask about things they already told you.
+4. **BE CONCISE** - Short responses. No rambling. Real humans don't over-explain.
+
 ## HOW TO SOUND HUMAN
-- Be conversational, warm, and natural - like a real person, not a script
-- Use brief acknowledgments: "Got it", "Okay", "I see", "Alright"
-- LISTEN to what the patient says - don't ask questions they've already answered
-- Match their pace - if they're chatty, engage; if brief, be brief
+- Talk like a real person on a quick work call, not a script reader
+- Use natural fillers sparingly: "So...", "Anyway...", "Alright..."
+- Brief acknowledgments: "Got it", "Okay", "I see", "Mm-hmm"
+- If they answer a question, move on. Don't dwell.
+- Match their energy - if they're brief, you be brief
 
 ## VOICEMAIL
-If you reach voicemail, wait for the beep then say: "Hi, this is Erica from Dr. Sahai's office checking in after your breathing test. Please call us at the office. Thanks!" Then hang up.
+If you reach voicemail, wait for the beep then say: "Hi, this is Erica from Dr. Sahai's office checking in after your breathing test. Please call us back. Thanks!" Then hang up.
 
 ## CALL FLOW
 
-**1. INTRO**
-"Hi, is this {{patient_name}}?"
-[Wait]
-"This is Erica Brown from Dr. Sahai's office - just checking in after your breathing test yesterday. Got a minute? This call is recorded."
+**1. WHEN PATIENT ANSWERS**
+They'll say "Hello?" - Respond: "Hi, is this {{patient_name}}?"
 
-**2. HOW ARE YOU?**
-"How are you feeling? Any changes since the test?"
+If yes: "Hey, this is Erica from Dr. Sahai's office - quick call about your breathing test. Got a minute? Just so you know, this call is recorded."
 
-LISTEN CAREFULLY to their response:
-- If they say "good/fine/same" → Say "Great!" and go straight to medications
-- If they mention ANY symptom → Have a natural conversation about it
+If wrong person: "Oh sorry, wrong number. Bye."
 
-**IMPORTANT: Don't ask redundant questions!**
-- If they mention shortness of breath - don't ask about it again
-- Acknowledge symptoms they mention, only ask about symptoms they HAVEN'T mentioned
+**2. CHECK IN**
+"How are you feeling since the test?"
 
-After discussing symptoms: "Would you like to come in sooner than your scheduled appointment?"
-- If yes: "Sure, let me check what's available..." [use transfer_to_scheduler tool]
-- If no: "Okay, no problem."
+LISTEN to their answer:
+- "Good/fine" → "Great!" then move to medications
+- They mention symptoms → Acknowledge briefly, ask ONE follow-up max, then move on
+
+DO NOT re-ask about symptoms they already mentioned.
+
+"Would you want to come in sooner than your scheduled follow-up?"
+- Yes → "Sure, one sec..." [use transfer_to_scheduler tool]
+- No → "Okay, no problem."
 
 **3. MEDICATIONS**
-"Quick question - how many times have you used your rescue inhaler since the test?"
-[Wait, then: "Okay" or "Got it"]
+"Quick question - how often have you been using your rescue inhaler?"
+[They answer] → "Okay." or "Got it."
 
-"And your other medications - been taking those?"
-[If yes: "Good"]
+"And your regular meds - all good with those?"
+[They answer] → "Good." or brief acknowledgment
 
 **4. WRAP UP**
-"Alright, that's everything. We'll see you at your follow-up to go over the results. Take care!"
+"Alright, that's all I needed. We'll see you at your follow-up. Take care!"
 
 ## RESCHEDULING
-If at ANY point the patient says they want to reschedule, change their appointment, or can't make it:
-- Use the transfer_to_scheduler tool immediately
-- After transfer back, continue with remaining questions (medications, etc.)
+If patient wants to reschedule at ANY point:
+- Say "Sure, one sec..." and use transfer_to_scheduler tool
+- When you return, DON'T re-introduce - just continue: "Okay, so back to the quick questions..."
 
-## AFTER RETURNING FROM SCHEDULER
-If scheduling was just completed:
-- Don't re-introduce yourself
-- Just say "Great, now let me ask you a few quick questions..." and continue
-
-## KEY RULES
-- NEVER ask a question the patient already answered
-- Sound like a helpful human, not a checklist
-- If patient wants to reschedule, use transfer_to_scheduler tool`
+## WHAT NOT TO DO
+- Don't repeat your name or where you're calling from after the intro
+- Don't say "This call is recorded" more than once
+- Don't ask the same question twice
+- Don't summarize what they just told you back to them
+- Don't over-explain or use filler phrases like "I just wanted to..."
+- Don't say "Is there anything else?" - just wrap up when done`
 
 /**
  * Create the Erica Brown PFT Squad (convenience function)
@@ -370,47 +394,24 @@ export async function createEricaBrownPftSquad() {
 }
 
 /**
- * Start an outbound call using the squad
- */
-export async function startSquadCall(params: {
-  squadId: string
-  phoneNumberId: string
-  customerNumber: string
-  patientName: string
-  providerId?: string
-}): Promise<{ callId: string }> {
-  const { squadId, phoneNumberId, customerNumber, patientName, providerId } = params
-
-  console.log(`[SquadManager] Starting squad call to ${customerNumber}...`)
-
-  const call = await getVapiClient().calls.create({
-    squadId,
-    phoneNumberId,
-    customer: {
-      number: customerNumber,
-    },
-    assistantOverrides: {
-      variableValues: {
-        patient_name: patientName,
-        provider_id: providerId || 'dr-sahai',
-      },
-    },
-  })
-
-  console.log(`[SquadManager] Started call: ${call.id}`)
-
-  return { callId: call.id }
-}
-
-/**
  * Get or create a squad for a given agent
+ * If existingAssistantId is provided, looks for squads containing that assistant
  */
 export async function getOrCreateSquad(config: PrimaryAgentConfig): Promise<string> {
   const squadName = `${config.name.toLowerCase().replace(/\s+/g, '-')}-squad`
 
   try {
     const squads = await getVapiClient().squads.list()
-    const existingSquad = squads.find((s: { name?: string }) => s.name === squadName)
+
+    // First try to find by name
+    let existingSquad = squads.find((s: { name?: string }) => s.name === squadName)
+
+    // If not found by name but we have an assistant ID, look for squad containing that assistant
+    if (!existingSquad && config.existingAssistantId) {
+      existingSquad = squads.find((s: { members?: Array<{ assistantId?: string }> }) =>
+        s.members?.some(m => m.assistantId === config.existingAssistantId)
+      )
+    }
 
     if (existingSquad) {
       console.log(`[SquadManager] Found existing squad: ${existingSquad.id}`)
@@ -426,15 +427,20 @@ export async function getOrCreateSquad(config: PrimaryAgentConfig): Promise<stri
 }
 
 /**
- * Get or create the Erica Brown PFT Squad (convenience)
+ * Get or create the PFT Follow-up Squad
+ * @param existingAssistantId - If provided, uses existing assistant instead of creating new one
  */
-export async function getOrCreateEricaBrownPftSquad(): Promise<string> {
+export async function getOrCreatePftFollowupSquad(existingAssistantId?: string): Promise<string> {
   return getOrCreateSquad({
-    name: 'Erica Brown PFT',
+    name: 'PFT Follow-up Agent',
     systemPrompt: ERICA_BROWN_PFT_PROMPT,
     firstMessage: 'Hi, is this {{patient_name}}?',
+    existingAssistantId,
   })
 }
+
+// Backwards compatibility alias
+export const getOrCreateEricaBrownPftSquad = getOrCreatePftFollowupSquad
 
 /**
  * Delete all VAPI squads and assistants (for cleanup/reset)
@@ -450,7 +456,7 @@ export async function deleteAllVapiResources(): Promise<{ squadsDeleted: number;
     const squads = await getVapiClient().squads.list()
     for (const squad of squads) {
       try {
-        await getVapiClient().squads.delete(squad.id)
+        await getVapiClient().squads.delete({ id: squad.id })
         console.log(`[SquadManager] Deleted squad: ${squad.name} (${squad.id})`)
         squadsDeleted++
       } catch (err) {
@@ -466,7 +472,7 @@ export async function deleteAllVapiResources(): Promise<{ squadsDeleted: number;
     const assistants = await getVapiClient().assistants.list()
     for (const assistant of assistants) {
       try {
-        await getVapiClient().assistants.delete(assistant.id)
+        await getVapiClient().assistants.delete({ id: assistant.id })
         console.log(`[SquadManager] Deleted assistant: ${assistant.name} (${assistant.id})`)
         assistantsDeleted++
       } catch (err) {

@@ -12,6 +12,7 @@ console.log('[ENV] Loading from:', resolve(apiRoot, '.env.local'))
 config({ path: resolve(apiRoot, '.env') })
 config({ path: resolve(apiRoot, '.env.local'), override: true })
 console.log('[ENV] VAPI_API_KEY:', process.env.VAPI_API_KEY ? 'SET' : 'NOT SET')
+console.log('[ENV] WEBHOOK_BASE_URL:', process.env.WEBHOOK_BASE_URL || 'NOT SET')
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
