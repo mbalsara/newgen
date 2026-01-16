@@ -205,32 +205,23 @@ export const vapiApi = {
         return null
       }
 
-      // Build assistant overrides with server URL if configured
-      let assistantOverrides = params.assistantOverrides
+      // Get webhook base URL for tool calls - runtime URL switching between local/cloud
       const webhookBaseUrl = getWebhookBaseUrl()
-      if (webhookBaseUrl) {
-        assistantOverrides = {
-          ...assistantOverrides,
-          server: {
-            url: `${webhookBaseUrl}/api/calls/webhook`,
-          },
-        }
-      }
 
       // Build request using SDK types
       // Use squadId if provided, otherwise assistantId
       const callRequest: Vapi.CreateCallDto = params.squadId
         ? {
-            // Squad call - ONLY pass variableValues, no other overrides
-            // The squad and its assistants are fully configured in VAPI
+            // Squad call - pass variableValues and serverUrl for runtime URL switching
             squadId: params.squadId,
             phoneNumberId: params.phoneNumber,
             customer: {
               number: phoneResult.e164,
             },
-            ...(params.variableValues && {
-              assistantOverrides: { variableValues: params.variableValues },
-            }),
+            assistantOverrides: {
+              ...(params.variableValues && { variableValues: params.variableValues }),
+              ...(webhookBaseUrl && { serverUrl: webhookBaseUrl }),
+            },
           }
         : {
             // Single assistant call - pass full overrides
@@ -239,7 +230,10 @@ export const vapiApi = {
             customer: {
               number: phoneResult.e164,
             },
-            assistantOverrides,
+            assistantOverrides: {
+              ...params.assistantOverrides,
+              ...(webhookBaseUrl && { serverUrl: webhookBaseUrl }),
+            },
           }
 
       console.log('[VAPI SDK] Creating call with request:', JSON.stringify(callRequest, null, 2))
