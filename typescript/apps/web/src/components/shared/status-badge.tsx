@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { TaskStatus } from '@/lib/task-types'
-import { getStatusLabel } from '@/lib/mock-agents'
+import { getStatusLabel } from '@/lib/constants'
 
 interface StatusBadgeProps {
   status: TaskStatus

@@ -91,7 +91,7 @@ export const AgentSchema = z.object({
   type: AgentTypeSchema,
   role: z.string(),
   avatar: z.string().nullable(),
-  vapiAssistantId: z.string().nullable(),
+  vapiAssistantId: z.string().nullable(), // VAPI assistant ID or squad ID
 
   // Voice configuration
   voiceId: z.string().nullable(),

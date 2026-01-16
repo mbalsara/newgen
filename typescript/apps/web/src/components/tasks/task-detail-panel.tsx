@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTasks } from '@/contexts/tasks-context'
-import { getAgent } from '@/lib/mock-agents'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { AgentSelector } from '@/components/agents/agent-selector'
 import { PatientFlagBanner } from '@/components/patients/patient-flag-banner'
@@ -38,6 +37,7 @@ export function TaskDetailPanel() {
     assignTask,
     markTaskDone,
     reopenTask,
+    getAgent,
   } = useTasks()
 
   const [showFlagModal, setShowFlagModal] = useState(false)

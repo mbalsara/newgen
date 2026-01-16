@@ -4,7 +4,6 @@ import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTasks } from '@/contexts/tasks-context'
-import { getAgent, aiAgents, staffMembers } from '@/lib/mock-agents'
 import { cn } from '@/lib/utils'
 import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, CallEvent, TaskFilters, TaskStatus, PatientFlagReason } from '@/lib/task-types'
 import { OutboundCallPanel } from '@/components/tasks/outbound-call-panel'
@@ -57,6 +56,7 @@ export default function TasksPage() {
     reopenTask,
     toggleNextStep,
     loading,
+    getAgent,
   } = useTasks()
 
   const [expandedTranscripts, setExpandedTranscripts] = useState<Record<string, boolean>>({})
@@ -257,6 +257,7 @@ function TaskCard({ task, isSelected, isFlagged, onClick }: {
   isFlagged: boolean
   onClick: () => void
 }) {
+  const { getAgent } = useTasks()
   const agent = getAgent(task.assignedAgent)
 
   return (
@@ -321,6 +322,7 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onF
   showAssignDropdown: boolean
   setShowAssignDropdown: (show: boolean) => void
 }) {
+  const { getAgent } = useTasks()
   const [showDemoCall, setShowDemoCall] = useState(false)
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [showAddNoteModal, setShowAddNoteModal] = useState(false)
@@ -557,13 +559,17 @@ function AgentDropdown({ currentAgentId, onSelect, onClose }: {
   onSelect: (id: string) => void
   onClose: () => void
 }) {
+  const { getAIAgents, getStaffAgents } = useTasks()
   const [search, setSearch] = useState('')
 
-  const filteredAiAgents = aiAgents.filter(a =>
+  const aiAgentsList = getAIAgents()
+  const staffList = getStaffAgents()
+
+  const filteredAiAgents = aiAgentsList.filter(a =>
     a.name.toLowerCase().includes(search.toLowerCase()) ||
     a.role.toLowerCase().includes(search.toLowerCase())
   )
-  const filteredStaff = staffMembers.filter(s =>
+  const filteredStaff = staffList.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.role.toLowerCase().includes(search.toLowerCase())
   )
@@ -643,14 +649,18 @@ function FilterDropdown({ filters, setFilters, onClose }: {
   setFilters: (filters: Partial<TaskFilters>) => void
   onClose: () => void
 }) {
+  const { getAIAgents, getStaffAgents } = useTasks()
   const [activeSubmenu, setActiveSubmenu] = useState<'status' | 'agent' | null>(null)
   const [agentSearch, setAgentSearch] = useState('')
 
-  const filteredAiAgents = aiAgents.filter(a =>
+  const aiAgentsList = getAIAgents()
+  const staffList = getStaffAgents()
+
+  const filteredAiAgents = aiAgentsList.filter(a =>
     a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
     a.role.toLowerCase().includes(agentSearch.toLowerCase())
   )
-  const filteredStaff = staffMembers.filter(s =>
+  const filteredStaff = staffList.filter(s =>
     s.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
     s.role.toLowerCase().includes(agentSearch.toLowerCase())
   )

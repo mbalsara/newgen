@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { AgentAvatar } from './agent-avatar'
-import { getFilteredAgents, getAgent } from '@/lib/mock-agents'
-import type { VoiceAgent } from '@/lib/task-types'
+import { useTasks } from '@/contexts/tasks-context'
+import type { Agent } from '@/lib/api-client'
 
 interface AgentSelectorProps {
   value: string
@@ -20,13 +20,31 @@ interface AgentSelectorProps {
 }
 
 export function AgentSelector({ value, onValueChange, className }: AgentSelectorProps) {
+  const { getAgent, getAIAgents, getStaffAgents } = useTasks()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
   const selectedAgent = getAgent(value)
-  const filtered = getFilteredAgents(search)
 
-  const handleSelect = (agent: VoiceAgent) => {
+  // Filter agents based on search
+  const filtered = useMemo(() => {
+    const aiAgents = getAIAgents()
+    const staffAgents = getStaffAgents()
+    const q = search.toLowerCase().trim()
+
+    if (!q) return { ai: aiAgents, staff: staffAgents }
+
+    return {
+      ai: aiAgents.filter(a =>
+        a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)
+      ),
+      staff: staffAgents.filter(a =>
+        a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)
+      ),
+    }
+  }, [search, getAIAgents, getStaffAgents])
+
+  const handleSelect = (agent: Agent) => {
     onValueChange(agent.id)
     setOpen(false)
     setSearch('')

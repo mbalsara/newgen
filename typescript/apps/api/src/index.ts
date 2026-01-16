@@ -12,6 +12,7 @@ console.log('[ENV] Loading from:', resolve(apiRoot, '.env.local'))
 config({ path: resolve(apiRoot, '.env') })
 config({ path: resolve(apiRoot, '.env.local'), override: true })
 console.log('[ENV] VAPI_API_KEY:', process.env.VAPI_API_KEY ? 'SET' : 'NOT SET')
+console.log('[ENV] WEBHOOK_BASE_URL:', process.env.WEBHOOK_BASE_URL || 'NOT SET')
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -21,6 +22,7 @@ import { schema } from './graphql/schema.js'
 import { agentRoutes } from './agents/routes.js'
 import { taskRoutes } from './tasks/routes.js'
 import { callRoutes } from './calls/routes.js'
+import { schedulingRoutes } from './scheduling/routes.js'
 
 const app = new Hono()
 
@@ -44,6 +46,7 @@ app.get('/health', (c) => {
 app.route('/api/agents', agentRoutes)
 app.route('/api/tasks', taskRoutes)
 app.route('/api/calls', callRoutes)
+app.route('/api/scheduling', schedulingRoutes)
 
 // =============================================================================
 // VAPI Proxy Routes

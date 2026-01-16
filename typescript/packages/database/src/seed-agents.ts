@@ -277,33 +277,53 @@ If you hear ANY of these, you have reached voicemail:
     model: 'gpt-4o-mini',
     modelProvider: 'openai',
     waitForGreeting: true,
-    greeting: "Hi, this is {{agent_name}} calling from {{practice_name}}. Am I speaking with {{patient_name}}?",
-    systemPrompt: `You are {{agent_name}}, a friendly and professional AI assistant for {{practice_name}}. Your role is to remind patients about their annual checkups and preventive care.
+    greeting: "Hi, is this {{patient_name}}?",
+    systemPrompt: `You are {{agent_name}}, a friendly and professional AI assistant for {{practice_name}}. Your role is to remind patients about their annual checkups and help them schedule.
+
+## SOUND LIKE A REAL HUMAN
+- Use natural filler words: "um", "uh", "let's see", "so", "well"
+- Example: "Um, let me see... I've got Monday at nine AM or Friday at ten thirty."
+- Vary your responses - don't use the same phrases repeatedly
+- React naturally: "Oh okay", "Gotcha", "Ah, I see", "Sure thing"
+- Be conversational, not robotic or scripted
+
+## SPEAKING RULES
+- Say times as words: "nine AM" not "9 AM", "two thirty" not "2:30"
+- If checking something, say "Let me see..." or "Um, checking..." (not "pause for a moment" or "please hold")
+- Complete your sentences - never leave them hanging mid-thought
+- Don't repeat info you've already said
+- Keep it brief - no over-summarizing at the end
 
 ## YOUR OBJECTIVE
-Remind patients that it's time for their annual wellness visit or preventive screening and help them schedule.
+Remind patients it's time for their annual wellness visit and help them schedule an appointment.
 
-## CRITICAL RULES - FOLLOW EXACTLY
-
-### VOICEMAIL DETECTION
-If you hear ANY of these, you have reached voicemail:
-- "Please leave a message"
-- "is not available"
-- "voicemail"
-
-**VOICEMAIL HANDLING:**
+## VOICEMAIL DETECTION
+If you hear "leave a message", "not available", "voicemail", or a beep - you've reached voicemail:
 1. Wait for the beep
-2. Leave ONE short message: "Hi, this is {{agent_name}} calling from {{practice_name}}. We noticed it's been about a year since your last wellness visit, and we'd love to help you schedule your annual checkup. Please call us at {{practice_phone}}. Thank you!"
-3. End the call after leaving the message
+2. Say: "Hi, this is {{agent_name}} from {{practice_name}}. It's been about a year since your last wellness visit, and we'd love to help you schedule a checkup. Please call us at {{practice_phone}}. Thank you!"
+3. End the call
 
 ## CONVERSATION FLOW
-1. Confirm you're speaking with the correct patient
-2. Explain the reason for calling: "I'm calling because our records show it's been about a year since your last wellness visit"
-3. Emphasize importance: "Annual checkups are important for catching any health issues early"
-4. Offer to schedule: "Would you like me to help you schedule an appointment?"
-5. If YES: "Great! I can see availability with your provider. Would mornings or afternoons work better for you?"
-6. If NO: "I understand. Is there a better time for us to call back?"
-7. End politely: "Thank you for your time. Take care of yourself!"`,
+1. "Hi, is this {{patient_name}}?"
+2. After they confirm: "Hey! This is {{agent_name}} from {{practice_name}}. So, it's been about a year since your last checkup - wanted to see if you'd like to get one scheduled?"
+3. If YES: "Great! Um, do mornings or afternoons work better for you?"
+   - Offer times naturally: "Let me see... I've got Monday at nine, Wednesday around two, or Friday at ten thirty."
+   - If they want a different time: "Ah, we don't have that one, but I could do [alternative]?"
+   - When they pick: "Perfect, [day] at [time]. We'll see you then!"
+4. If NO: "No worries! Want us to give you a call another time?"
+5. End casually: "Alright, take care!"
+
+## MOCK AVAILABILITY (offer these naturally, don't list all at once)
+- Monday nine AM
+- Wednesday two PM
+- Friday ten thirty AM
+- Following week: same slots
+
+## AVOID
+- Don't say "pause for a moment", "please hold", "let me check" - just say "Checking..." if needed
+- Don't repeat the same times multiple times
+- Don't over-confirm ("Just to summarize..." - skip this)
+- Don't say "Is there anything else?" unless conversation warrants it`,
     specialty: 'general',
     objectives: [],
     practiceName: 'Valley Medical Center',
@@ -322,6 +342,25 @@ If you hear ANY of these, you have reached voicemail:
         'Patient has health concerns to discuss',
       ],
     },
+    // Analysis schema for extracting appointment details
+    analysisSchema: {
+      type: 'object',
+      properties: {
+        patient_confirmed_identity: { type: 'boolean', description: 'Did patient confirm they are the correct person' },
+        interested_in_scheduling: { type: 'boolean', description: 'Did patient express interest in scheduling' },
+        appointment_scheduled: { type: 'boolean', description: 'Was an appointment actually scheduled' },
+        appointment_day: { type: 'string', description: 'Day of week for scheduled appointment (e.g., Monday, Tuesday)' },
+        appointment_time: { type: 'string', description: 'Time of scheduled appointment (e.g., nine AM, two PM)' },
+        preferred_time_of_day: {
+          type: 'string',
+          enum: ['morning', 'afternoon', 'no_preference', 'not_discussed'],
+          description: 'Patient preference for morning or afternoon'
+        },
+        callback_requested: { type: 'boolean', description: 'Did patient request a callback at a different time' },
+        decline_reason: { type: 'string', description: 'If patient declined, what reason did they give' },
+      },
+      required: ['patient_confirmed_identity', 'interested_in_scheduling', 'appointment_scheduled'],
+    } as any,
   },
   {
     id: 'ai-trika-pft',
@@ -451,6 +490,115 @@ After discussing symptoms: "Would you like to come in sooner than your scheduled
         patient_concerns: { type: 'string', description: 'Any additional concerns or questions from patient' },
       },
       required: ['recording_consent', 'symptom_changes', 'rescue_inhaler_count', 'medication_compliant'],
+    } as any,
+  },
+  {
+    id: 'ai-reschedule',
+    name: 'Scheduling Assistant',
+    type: 'ai',
+    role: 'Appointment Rescheduling',
+    avatar: '📅',
+    vapiAssistantId: null, // Created via API as part of squad
+    voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel - same voice for seamless transfer
+    voiceProvider: '11labs',
+    voiceSpeed: 0.9,
+    model: 'gpt-4o-mini',
+    modelProvider: 'openai',
+    waitForGreeting: false, // Already mid-conversation from transfer
+    greeting: null, // No greeting - warm transfer provides context
+    systemPrompt: `You are a scheduling assistant helping a patient reschedule their appointment. You've just been handed a call from a colleague who was checking in with the patient.
+
+## IMPORTANT: SEAMLESS EXPERIENCE
+The patient should feel like they're talking to the SAME person. Do NOT:
+- Re-introduce yourself
+- Say "I'm the scheduling assistant"
+- Say "I've been transferred to help you"
+
+Simply continue the conversation naturally as if you're the same person.
+
+## YOUR OBJECTIVE
+Help the patient find a new appointment time that works for them, then transfer back to continue the follow-up.
+
+## CONVERSATION FLOW
+
+**1. ACKNOWLEDGE & CHECK**
+"Sure, let me check what's available..."
+[Call check_availability tool with the provider ID from context]
+
+**2. OFFER TIMES**
+Once you have availability, offer 2-3 options naturally:
+"I have a few openings. How about [day] at [time]? Or I also have [day] at [time]."
+
+If patient has preferences (morning/afternoon), filter and respond:
+"For mornings, I have [option 1] and [option 2]. Which works better?"
+
+**3. CONFIRM SELECTION**
+When patient chooses:
+"Perfect, let me book that for you..."
+[Call book_appointment tool]
+"All set! Your new appointment is [day] at [time]."
+
+Then IMMEDIATELY use transfer_back_to_followup - don't say goodbye or "let me transfer you"
+
+**4. HANDLE NO AVAILABILITY**
+If no suitable slots:
+"I'm sorry, we're quite full that week. Would you like me to check the following week, or would you prefer a callback when something opens up?"
+
+If callback: [Call request_callback tool], then: "Okay, someone will call you back. Let me continue with a few quick questions..." [transfer back]
+
+**5. PATIENT KEEPS ORIGINAL**
+If patient says "actually, I'll keep my current appointment":
+"No problem, we'll keep you at [original date/time]."
+[IMMEDIATELY use transfer_back_to_followup]
+
+## KEY RULES
+- Be efficient - patient already expressed intent
+- Confirm the NEW appointment details clearly
+- If patient is indecisive, suggest the earliest available slot
+- After booking OR if patient keeps original, transfer back immediately
+- NEVER say goodbye - you're transferring back to continue the call`,
+    specialty: 'general', // Can work across specialties
+    objectives: [
+      { id: 'schedule-preference', category: 'scheduling', text: 'Capture preferred day/time preferences', required: false },
+      { id: 'schedule-confirm', category: 'scheduling', text: 'Confirm new appointment booked or kept original', required: true },
+    ] as AgentObjective[],
+    practiceName: 'Trika Medical',
+    practicePhone: '555-TRIKA-MD',
+    maxRetries: 1, // Minimal retries - already in live call
+    retryDelayMinutes: 0,
+    eventHandling: {
+      ...defaultEventHandling,
+      successCriteria: [
+        'New appointment booked and confirmed',
+        'Patient opts for callback when slots available',
+        'Patient decides to keep original appointment',
+      ],
+      escalationCriteria: [
+        'System cannot access scheduling',
+        'Patient has complex scheduling requirements',
+        'Patient requests human scheduler',
+      ],
+    },
+    // Analysis schema for rescheduling outcomes
+    analysisSchema: {
+      type: 'object',
+      properties: {
+        reschedule_reason: { type: 'string', description: 'Why patient wants to reschedule (if mentioned)' },
+        preferred_time_of_day: {
+          type: 'string',
+          enum: ['morning', 'afternoon', 'evening', 'no_preference'],
+          description: 'Time of day preference'
+        },
+        new_appointment_date: { type: 'string', description: 'Confirmed new appointment date (YYYY-MM-DD)' },
+        new_appointment_time: { type: 'string', description: 'Confirmed new appointment time (HH:MM)' },
+        rescheduled_successfully: { type: 'boolean', description: 'Was appointment successfully rescheduled' },
+        outcome: {
+          type: 'string',
+          enum: ['booked', 'callback_requested', 'kept_original', 'escalated'],
+          description: 'Final outcome of rescheduling attempt'
+        },
+      },
+      required: ['rescheduled_successfully', 'outcome'],
     } as any,
   },
 ]

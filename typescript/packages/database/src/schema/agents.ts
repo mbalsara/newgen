@@ -75,7 +75,7 @@ export const agents = pgTable('agents', {
   type: text('type').notNull().$type<AgentType>(), // 'ai' | 'staff'
   role: text('role').notNull(), // e.g., 'Appointment Confirmation', 'Front Office'
   avatar: text('avatar'), // emoji for AI, initials for staff
-  vapiAssistantId: text('vapi_assistant_id'), // VAPI assistant ID (AI agents only)
+  vapiAssistantId: text('vapi_assistant_id'), // VAPI assistant ID or squad ID
 
   // Voice configuration (AI agents only)
   voiceId: text('voice_id'),           // ElevenLabs voice ID

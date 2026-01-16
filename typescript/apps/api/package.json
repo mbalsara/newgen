@@ -12,6 +12,7 @@
     "lint": "eslint src --ext .ts",
     "test": "vitest",
     "seed": "tsx scripts/seed.ts",
+    "reset-vapi": "tsx scripts/reset-vapi.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"

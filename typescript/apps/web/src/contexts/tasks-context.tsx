@@ -5,7 +5,7 @@ import type {
   PatientBehaviorFlag,
   PatientFlagReason,
 } from '@/lib/task-types'
-import { api, type TaskWithPatient, type Task as ApiTask } from '@/lib/api-client'
+import { api, type TaskWithPatient, type Task as ApiTask, type Agent } from '@/lib/api-client'
 import { useCurrentUser } from '@/contexts/user-context'
 
 // Convert API task (with patient) to frontend task format
@@ -61,6 +61,12 @@ interface TasksState {
 }
 
 interface TasksContextValue extends TasksState {
+  // Agents
+  agents: Agent[]
+  getAgent: (id: string) => Agent | undefined
+  getAIAgents: () => Agent[]
+  getStaffAgents: () => Agent[]
+
   // Selection
   selectTask: (id: number) => void
   clearSelection: () => void
@@ -154,8 +160,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  // Agents cache for display names
-  const [agentsMap, setAgentsMap] = React.useState<Record<string, { name: string; type: string }>>({})
+  // Agents cache - stores full agent data from API
+  const [agents, setAgents] = React.useState<Agent[]>([])
+  const [agentsMap, setAgentsMap] = React.useState<Record<string, Agent>>({})
 
   // Load tasks from API on mount
   React.useEffect(() => {
@@ -165,15 +172,16 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         setError(null)
 
         // Load tasks and agents in parallel
-        const [apiTasks, agents] = await Promise.all([
+        const [apiTasks, agentsList] = await Promise.all([
           api.tasks.list(),
           api.agents.list(),
         ])
 
-        // Build agents map
-        const agentMap: Record<string, { name: string; type: string }> = {}
-        for (const agent of agents) {
-          agentMap[agent.id] = { name: agent.name, type: agent.type }
+        // Store agents and build lookup map
+        setAgents(agentsList)
+        const agentMap: Record<string, Agent> = {}
+        for (const agent of agentsList) {
+          agentMap[agent.id] = agent
         }
         setAgentsMap(agentMap)
 
@@ -301,7 +309,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const assignTask = React.useCallback(async (taskId: number, agentId: string) => {
     try {
-      const agentName = agentsMap[agentId]?.name || agentId
+      const agent = agentsMap[agentId]
+      const agentName = agent?.name || agentId
       const updatedTask = await api.tasks.reassign(taskId, agentId, agentName)
       setTasks(prev =>
         prev.map(task => (task.id === taskId ? mergeTaskUpdate(task, updatedTask) : task))
@@ -516,6 +525,21 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
   }, [getFilteredTasks])
 
+  // Get agent by ID
+  const getAgent = React.useCallback((id: string): Agent | undefined => {
+    return agentsMap[id]
+  }, [agentsMap])
+
+  // Get AI agents only
+  const getAIAgents = React.useCallback((): Agent[] => {
+    return agents.filter(a => a.type === 'ai')
+  }, [agents])
+
+  // Get staff agents only
+  const getStaffAgents = React.useCallback((): Agent[] => {
+    return agents.filter(a => a.type === 'staff')
+  }, [agents])
+
   // Stats
   const getStats = React.useCallback(() => {
     const completed = tasks.filter(t => t.status === 'completed').length
@@ -538,6 +562,10 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     refreshing,
     loading,
     error,
+    agents,
+    getAgent,
+    getAIAgents,
+    getStaffAgents,
     selectTask,
     clearSelection,
     getSelectedTask,

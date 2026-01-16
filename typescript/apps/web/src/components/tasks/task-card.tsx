@@ -3,7 +3,6 @@ import { AlertTriangle, Check } from 'lucide-react'
 import { StatusDot } from '@/components/shared/status-dot'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { Badge } from '@/components/ui/badge'
-import { getAgent } from '@/lib/mock-agents'
 import { useTasks } from '@/contexts/tasks-context'
 import type { Task } from '@/lib/task-types'
 
@@ -14,7 +13,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, isSelected, onClick }: TaskCardProps) {
-  const { isPatientFlagged } = useTasks()
+  const { isPatientFlagged, getAgent } = useTasks()
   const agent = getAgent(task.assignedAgent)
   const flagged = isPatientFlagged(task.patient.id)
 

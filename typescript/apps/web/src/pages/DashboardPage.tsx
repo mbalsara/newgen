@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useTasks } from '@/contexts/tasks-context'
 import { useCurrentUser } from '@/contexts/user-context'
-import { getAgent } from '@/lib/mock-agents'
 import { todaysAppointments } from '@/lib/mock-data'
 import { OpenSlotsWidget } from '@/components/open-slots-widget'
 import type { Task } from '@/lib/task-types'
@@ -421,6 +420,7 @@ function CompactCard({
   flagged: boolean
   onClick: () => void
 }) {
+  const { getAgent } = useTasks()
   const agent = getAgent(task.assignedAgent)
 
   return (
