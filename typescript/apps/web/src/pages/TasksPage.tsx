@@ -1137,6 +1137,128 @@ function NextStepsCard({ event, onToggle }: { event: NextStepsEvent; onToggle: (
   )
 }
 
+// Patient Responses Card - displays structured outputs from VAPI in a human-readable format
+function PatientResponsesCard({ structuredData }: { structuredData: Record<string, unknown> }) {
+  // Parse VAPI structured outputs format: { uuid: { name, result } } or flat { key: value }
+  const parseStructuredData = (data: Record<string, unknown>) => {
+    const items: Array<{ name: string; value: unknown; isBoolean: boolean }> = []
+
+    for (const [key, value] of Object.entries(data)) {
+      // Check if value is VAPI structuredOutput format: { name, result }
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        'name' in value &&
+        'result' in value
+      ) {
+        const outputObj = value as { name: string; result: unknown }
+        items.push({
+          name: outputObj.name,
+          value: outputObj.result,
+          isBoolean: typeof outputObj.result === 'boolean',
+        })
+      } else {
+        // Flat format: key is the name, value is the result
+        items.push({
+          name: key,
+          value: value,
+          isBoolean: typeof value === 'boolean',
+        })
+      }
+    }
+
+    return items
+  }
+
+  // Format snake_case or kebab-case to Title Case
+  const formatLabel = (name: string): string => {
+    return name
+      .replace(/[-_]/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+  }
+
+  // Format value for display
+  const formatValue = (value: unknown): string => {
+    if (value === null || value === undefined) {
+      return 'Not provided'
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'Yes' : 'No'
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value.join(', ') : 'None'
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value)
+    }
+    return String(value)
+  }
+
+  const items = parseStructuredData(structuredData)
+
+  // Separate boolean items (for badges) from text items
+  const booleanItems = items.filter(item => item.isBoolean)
+  const textItems = items.filter(item => !item.isBoolean)
+
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-3 bg-violet-50 rounded-lg border border-violet-200 p-3">
+      <div className="text-xs font-medium text-violet-700 uppercase tracking-wide mb-3">
+        Patient Responses
+      </div>
+
+      {/* Boolean items as badges */}
+      {booleanItems.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {booleanItems.map((item, index) => {
+            const isYes = item.value === true
+            return (
+              <span
+                key={index}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
+                  isYes
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                )}
+              >
+                {isYes ? (
+                  <Check className="w-3 h-3" />
+                ) : (
+                  <X className="w-3 h-3" />
+                )}
+                {formatLabel(item.name)}
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Text items as list */}
+      {textItems.length > 0 && (
+        <div className="space-y-2">
+          {textItems.map((item, index) => (
+            <div key={index} className="bg-white rounded-lg border border-violet-100 p-2.5">
+              <div className="text-[10px] font-medium text-violet-600 uppercase tracking-wide mb-1">
+                {formatLabel(item.name)}
+              </div>
+              <div className="text-sm text-gray-700">
+                {formatValue(item.value)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Call Event Card
 function CallEventCard({ event, isExpanded, onToggle }: { event: CallEvent; isExpanded?: boolean; onToggle: () => void }) {
   const [showAudioPlayer, setShowAudioPlayer] = useState(false)
@@ -1144,10 +1266,6 @@ function CallEventCard({ event, isExpanded, onToggle }: { event: CallEvent; isEx
   const hasRecording = !!event.recordingUrl
   const hasSummary = !!event.summary || !!event.analysis?.summary
   const hasStructuredData = event.analysis?.structuredData && Object.keys(event.analysis.structuredData).length > 0
-
-  // Debug: log analysis data
-  console.log('[CallEventCard] event analysis:', event.analysis)
-  console.log('[CallEventCard] hasStructuredData:', hasStructuredData)
 
   // Get a friendly status from endedReason
   const getStatusLabel = (reason: string) => {
@@ -1188,42 +1306,7 @@ function CallEventCard({ event, isExpanded, onToggle }: { event: CallEvent; isEx
 
       {/* Structured Data / Extracted Answers from VAPI */}
       {hasStructuredData && (
-        <div className="mt-3 bg-violet-50 rounded-lg border border-violet-200 p-3">
-          <div className="text-xs font-medium text-violet-700 uppercase tracking-wide mb-2">Patient Responses</div>
-          <div className="space-y-2">
-            {Object.entries(event.analysis!.structuredData!).map(([key, value]) => {
-              // Format the key: snake_case to Title Case
-              const formattedKey = key
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                .join(' ')
-
-              // Format the value: booleans as Yes/No, arrays as comma-separated, etc.
-              let formattedValue: string
-              if (typeof value === 'boolean') {
-                formattedValue = value ? 'Yes' : 'No'
-              } else if (Array.isArray(value)) {
-                formattedValue = value.join(', ')
-              } else if (value === null || value === undefined) {
-                formattedValue = 'Not provided'
-              } else if (typeof value === 'object') {
-                formattedValue = JSON.stringify(value)
-              } else {
-                formattedValue = String(value)
-              }
-
-              return (
-                <div key={key} className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">{formattedKey}:</span>
-                    <span className="text-sm text-gray-600 ml-1">{formattedValue}</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <PatientResponsesCard structuredData={event.analysis!.structuredData!} />
       )}
 
       {/* Audio Player */}
