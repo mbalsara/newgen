@@ -215,10 +215,10 @@ export const callService = {
       console.log('[CALL] Final structuredOutputs:', JSON.stringify(vapiCall.artifact?.structuredOutputs))
       console.log('[CALL] Final summary:', vapiCall.summary || vapiCall.analysis?.summary)
 
-      // Merge structuredOutputs into analysis if analysis.structuredData is empty
+      // Merge structuredOutputs into analysis as structuredData
       const analysis = vapiCall.analysis || {}
       if (vapiCall.artifact?.structuredOutputs && Object.keys(vapiCall.artifact.structuredOutputs).length > 0) {
-        (analysis as any).structuredOutputs = vapiCall.artifact.structuredOutputs
+        (analysis as any).structuredData = vapiCall.artifact.structuredOutputs
       }
 
       await callRepository.update(callId, {

@@ -115,7 +115,7 @@ export const taskService = {
     recordingUrl?: string
     analysis?: {
       summary?: string
-      structuredData?: Record<string, unknown>
+      structuredData?: Record<string, unknown>  // VAPI structuredOutputs keyed by UUID
       successEvaluation?: string
     }
     summary?: string
