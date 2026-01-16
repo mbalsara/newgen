@@ -188,7 +188,10 @@ export const callService = {
     let retries = 0
     const maxRetries = 8
     const hasRecording = () => vapiCall?.artifact?.recordingUrl || vapiCall?.recordingUrl || vapiCall?.stereoRecordingUrl
-    const hasAnalysis = () => vapiCall?.analysis?.structuredData && Object.keys(vapiCall.analysis.structuredData).length > 0
+    // Check both analysis.structuredData AND artifact.structuredOutputs
+    const hasAnalysis = () =>
+      (vapiCall?.analysis?.structuredData && Object.keys(vapiCall.analysis.structuredData).length > 0) ||
+      (vapiCall?.artifact?.structuredOutputs && Object.keys(vapiCall.artifact.structuredOutputs).length > 0)
 
     while (retries < maxRetries && vapiCall && (!hasRecording() || !hasAnalysis())) {
       console.log('[CALL] Waiting for data, retry:', retries + 1, '- hasRecording:', !!hasRecording(), 'hasAnalysis:', !!hasAnalysis())
@@ -197,7 +200,8 @@ export const callService = {
       console.log('[CALL] VAPI retry response:', JSON.stringify({
         hasRecordingUrl: !!vapiCall?.recordingUrl,
         hasArtifactRecordingUrl: !!vapiCall?.artifact?.recordingUrl,
-        hasAnalysis: !!vapiCall?.analysis?.structuredData,
+        hasAnalysis: !!hasAnalysis(),
+        hasStructuredOutputs: !!vapiCall?.artifact?.structuredOutputs,
       }))
       retries++
     }
@@ -208,13 +212,20 @@ export const callService = {
       const recordingUrl = vapiCall.artifact?.recordingUrl || vapiCall.recordingUrl || vapiCall.stereoRecordingUrl
       console.log('[CALL] Final recording URL:', recordingUrl)
       console.log('[CALL] Final analysis:', JSON.stringify(vapiCall.analysis))
+      console.log('[CALL] Final structuredOutputs:', JSON.stringify(vapiCall.artifact?.structuredOutputs))
       console.log('[CALL] Final summary:', vapiCall.summary || vapiCall.analysis?.summary)
+
+      // Merge structuredOutputs into analysis if analysis.structuredData is empty
+      const analysis = vapiCall.analysis || {}
+      if (vapiCall.artifact?.structuredOutputs && Object.keys(vapiCall.artifact.structuredOutputs).length > 0) {
+        (analysis as any).structuredOutputs = vapiCall.artifact.structuredOutputs
+      }
 
       await callRepository.update(callId, {
         messages,
         transcript: vapiCall.artifact?.transcript || vapiCall.transcript,
         recordingUrl,
-        analysis: vapiCall.analysis,
+        analysis,
         summary: vapiCall.summary || vapiCall.analysis?.summary,
       })
       // Re-fetch the updated call

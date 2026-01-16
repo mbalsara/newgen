@@ -180,8 +180,7 @@ export const schedulingService = {
   },
 
   /**
-   * Send SMS confirmation
-   * TODO: Replace with Twilio integration
+   * Send SMS confirmation using Twilio
    */
   async sendSmsConfirmation(params: {
     phoneNumber: string
@@ -195,20 +194,27 @@ export const schedulingService = {
     // Compose SMS message
     const smsBody = `Your appointment with ${providerName || 'your provider'} is confirmed for ${appointmentDate} at ${appointmentTime}.${locationOrNotes ? ` ${locationOrNotes}` : ''} - Dr. Sahai's Office`
 
-    console.log(`[Scheduling] SMS to ${phoneNumber}:`, smsBody)
+    console.log(`[Scheduling] Sending SMS to ${phoneNumber}:`, smsBody)
 
-    // TODO: Replace with actual Twilio integration
-    // const twilio = require('twilio')(TWILIO_SID, TWILIO_AUTH)
-    // await twilio.messages.create({
-    //   body: smsBody,
-    //   from: TWILIO_PHONE,
-    //   to: phoneNumber,
-    // })
+    // Use the SMS service (Twilio)
+    const { sendSms } = await import('../services/sms')
+    const result = await sendSms({
+      to: phoneNumber,
+      message: smsBody,
+    })
 
-    // For now, just log and return success
-    return {
-      success: true,
-      message: 'Text confirmation sent!',
+    if (result.success) {
+      console.log(`[Scheduling] SMS sent successfully: ${result.messageId}`)
+      return {
+        success: true,
+        message: 'Text confirmation sent!',
+      }
+    } else {
+      console.error(`[Scheduling] SMS failed: ${result.error}`)
+      return {
+        success: false,
+        message: result.error || 'Failed to send text confirmation',
+      }
     }
   },
 }
