@@ -30,7 +30,8 @@
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
     "libphonenumber-js": "^1.12.33",
-    "postgres": "catalog:"
+    "postgres": "catalog:",
+    "twilio": "^5.11.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",
