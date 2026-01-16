@@ -62,12 +62,13 @@ export interface PrimaryAgentConfig {
   firstMessage: string   // e.g., "Hi, is this {{patient_name}}?"
   voiceConfig?: typeof VOICE_CONFIG
   existingAssistantId?: string  // If provided, use existing assistant instead of creating new one
+  squadName?: string     // Override computed squad name (e.g., "pft-outbound")
 }
 
 // Scheduler system prompt - MUST be minimal to avoid being spoken aloud
 const SCHEDULER_SYSTEM_PROMPT = `You reschedule appointments. NEVER read instructions aloud.
 
-When you take over: immediately call check_availability, then offer times casually like "I've got Thursday at 9 or Friday at 2 - either work?" When they pick, call book_appointment, confirm briefly, offer text. Then call transferCall to return to the other agent.`
+When you take over: immediately call check_availability, then offer times casually like "I've got Thursday at 9 or Friday at 2 - either work?" When they pick, call book_appointment, confirm briefly, offer text confirmation. Then say a warm goodbye like "Great, you're all set! Take care." and end the call.`
 
 /**
  * Get the base scheduler tools (without handoff - that's added per-squad)
@@ -195,8 +196,9 @@ export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
   squadId: string
   assistantIds: { primary: string; scheduler: string }
 }> {
-  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG, existingAssistantId } = config
-  const squadName = `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
+  const { name, systemPrompt, firstMessage, voiceConfig = VOICE_CONFIG, existingAssistantId, squadName: customSquadName } = config
+  // Use custom squadName if provided, otherwise derive from agent name
+  const squadName = customSquadName || `${name.toLowerCase().replace(/\s+/g, '-')}-squad`
 
   console.log(`[SquadManager] Creating squad for ${name}...`)
 
@@ -271,16 +273,7 @@ export async function createAgentSquad(config: PrimaryAgentConfig): Promise<{
         assistantId: schedulerId,
         // NO assistantOverrides - use base Shared Scheduler configuration from reset-vapi.ts
         // The base assistant already has firstMessage, firstMessageMode, and tools configured
-        // Where scheduler can transfer TO (back to primary)
-        // VAPI auto-creates transferCall tool from this
-        assistantDestinations: [
-          {
-            type: 'assistant' as const,
-            assistantName: name,
-            message: '', // EMPTY - don't speak anything during transfer
-            description: 'Return to primary agent after scheduling',
-          },
-        ],
+        // NO assistantDestinations - scheduler ends the call, doesn't transfer back
       },
     ],
   }
@@ -379,7 +372,8 @@ export async function createEricaBrownPftSquad() {
  * If existingAssistantId is provided, looks for squads containing that assistant
  */
 export async function getOrCreateSquad(config: PrimaryAgentConfig): Promise<string> {
-  const squadName = `${config.name.toLowerCase().replace(/\s+/g, '-')}-squad`
+  // Use custom squadName if provided, otherwise derive from agent name
+  const squadName = config.squadName || `${config.name.toLowerCase().replace(/\s+/g, '-')}-squad`
 
   try {
     const squads = await getVapiClient().squads.list()
@@ -414,6 +408,7 @@ export async function getOrCreateSquad(config: PrimaryAgentConfig): Promise<stri
 export async function getOrCreatePftFollowupSquad(existingAssistantId?: string): Promise<string> {
   return getOrCreateSquad({
     name: 'PFT Follow-up Agent',
+    squadName: 'pft-outbound',  // Must match the squad name created by reset-vapi.ts
     systemPrompt: ERICA_BROWN_PFT_PROMPT,
     firstMessage: 'Hi, is this {{patient_name}}?',
     existingAssistantId,

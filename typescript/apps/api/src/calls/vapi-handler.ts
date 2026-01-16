@@ -221,17 +221,19 @@ export const vapiApi = {
       // Use squadId if provided, otherwise assistantId
       const callRequest: Vapi.CreateCallDto = params.squadId
         ? {
+            // Squad call - ONLY pass variableValues, no other overrides
+            // The squad and its assistants are fully configured in VAPI
             squadId: params.squadId,
             phoneNumberId: params.phoneNumber,
             customer: {
               number: phoneResult.e164,
             },
-            // For squads, pass variable values for template substitution
-            assistantOverrides: params.variableValues
-              ? { ...assistantOverrides, variableValues: params.variableValues }
-              : assistantOverrides,
+            ...(params.variableValues && {
+              assistantOverrides: { variableValues: params.variableValues },
+            }),
           }
         : {
+            // Single assistant call - pass full overrides
             assistantId: params.assistantId,
             phoneNumberId: params.phoneNumber,
             customer: {

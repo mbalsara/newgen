@@ -93,7 +93,7 @@ const MODEL_CONFIG = {
 // Scheduler system prompt - MUST be minimal to avoid being spoken aloud
 const SCHEDULER_SYSTEM_PROMPT = `You reschedule appointments. NEVER read instructions aloud.
 
-When you take over: immediately call check_availability, then offer times casually like "I've got Thursday at 9 or Friday at 2 - either work?" When they pick, call book_appointment, confirm briefly, offer text. Then call transferCall to return to the other agent.`
+When you take over: immediately call check_availability, then offer times casually like "I've got Thursday at 9 or Friday at 2 - either work?" When they pick, call book_appointment, confirm briefly, offer text confirmation. Then say a warm goodbye like "Great, you're all set! Take care." and end the call.`
 
 // Agents that need squads - NOTE: Squads are created at runtime by squad-manager
 // This script only creates standalone assistants
@@ -332,36 +332,8 @@ async function createSquad(
 ): Promise<string> {
   const squadName = `${agent.name.toLowerCase().replace(/\s+/g, '-')}-squad`
 
-  // Build scheduler tools WITH handoff to this agent
-  const schedulerToolsWithHandoff = [
-    ...getSchedulerTools(),
-    {
-      type: 'transferCall',
-      function: {
-        name: 'handoff_to_primary',
-        description: 'Hand off back to the primary agent to continue the call after scheduling is complete.',
-        parameters: {
-          type: 'object',
-          properties: {
-            outcome: {
-              type: 'string',
-              enum: ['booked', 'callback_requested', 'kept_original'],
-            },
-            summary: { type: 'string' },
-          },
-          required: ['outcome'],
-        },
-      },
-      destinations: [
-        {
-          type: 'assistant',
-          assistantName: agent.name,
-          message: '',
-          description: 'Return to primary agent',
-        },
-      ],
-    },
-  ]
+  // Scheduler tools - NO back-transfer, scheduler ends the call
+  const schedulerTools = getSchedulerTools()
 
   const squad = await vapiClient.squads.create({
     name: squadName,
@@ -378,12 +350,10 @@ async function createSquad(
           model: {
             ...MODEL_CONFIG,
             messages: [{ role: 'system', content: SCHEDULER_SYSTEM_PROMPT }],
-            tools: schedulerToolsWithHandoff,
+            tools: schedulerTools,
           } as unknown as Vapi.AssistantOverridesModel,
         },
-        assistantDestinations: [
-          { type: 'assistant', assistantName: agent.name, message: '', description: 'Return to primary' },
-        ],
+        // NO assistantDestinations - scheduler ends the call, doesn't transfer back
       },
     ],
   })

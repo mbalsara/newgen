@@ -3,16 +3,10 @@ import { vapiApi, parseVapiMessages, detectAbusiveLanguage, shouldCompleteTask, 
 import { taskService } from '../tasks/service'
 import { agentService } from '../agents/service'
 import { buildCallPrompt, buildAssistantOverrides, type PatientContext } from '../agents/prompt-builder'
-import { getOrCreatePftFollowupSquad } from '../scheduling/squad-manager'
 import type { Call, NewCall, TranscriptMessage, Agent } from '@repo/database'
 
-// Set of agent IDs that should use squads for multi-agent handoffs
-// Maps to a function that creates/gets the squad, accepting the existing assistant ID
-const SQUAD_ENABLED_AGENTS: Record<string, (existingAssistantId?: string) => Promise<string>> = {
-  'ai-trika-pft': getOrCreatePftFollowupSquad,
-  // Add more agents here as needed:
-  // 'ai-luna': getOrCreateConfirmationSquad,
-}
+// Agent IDs that use squads (vapiAssistantId contains squad ID, not assistant ID)
+const SQUAD_ENABLED_AGENTS = new Set(['ai-trika-pft'])
 
 export const callService = {
   // Get all calls
@@ -61,31 +55,24 @@ export const callService = {
     // Build VAPI assistant overrides (pass agent for model provider info)
     const assistantOverrides = buildAssistantOverrides(promptConfig, agent)
 
-    // Check if this agent should use a squad for multi-agent handoffs
-    const getSquadId = SQUAD_ENABLED_AGENTS[params.agentId]
+    // Check if this agent uses a squad (vapiAssistantId is squad ID)
     let vapiResult: { id: string; status: string } | null = null
 
-    if (getSquadId) {
-      // Use squad for agents with handoff capabilities
-      // Pass the existing assistant ID so it can be reused in the squad
-      try {
-        const squadId = await getSquadId(agent.vapiAssistantId)
-        console.log(`[CALL] Starting squad call for agent ${params.agentId}, squad: ${squadId}, assistant: ${agent.vapiAssistantId}`)
+    if (SQUAD_ENABLED_AGENTS.has(params.agentId)) {
+      // Use squad - vapiAssistantId contains the squad ID
+      const squadId = agent.vapiAssistantId
+      console.log(`[CALL] Starting squad call for agent ${params.agentId}, squad: ${squadId}`)
 
-        vapiResult = await vapiApi.startCall({
-          squadId,
-          phoneNumber: params.phoneNumberId,
-          customerNumber: params.customerNumber,
-          assistantOverrides,
-          variableValues: {
-            patient_name: params.patientName,
-            provider_id: 'dr-sahai',
-          },
-        })
-      } catch (error) {
-        console.error('[CALL] Error getting/creating squad:', error)
-        return { error: 'Failed to get squad for agent' }
-      }
+      vapiResult = await vapiApi.startCall({
+        squadId,
+        phoneNumber: params.phoneNumberId,
+        customerNumber: params.customerNumber,
+        variableValues: {
+          patient_name: params.patientName,
+          agent_name: agent.name,
+          provider_id: 'dr-sahai',
+        },
+      })
     } else {
       // Use single assistant for agents without handoffs
       vapiResult = await vapiApi.startCall({
