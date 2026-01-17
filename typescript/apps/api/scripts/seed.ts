@@ -51,6 +51,14 @@ const aiAgents: NewAgent[] = [
     vapiAssistantId: 'aa162312-8a2c-46c1-922e-e3cb65f802c8',
   },
   {
+    id: 'ai-maggi',
+    name: 'Maggi',
+    type: 'ai',
+    role: 'Patient Follow-up',
+    avatar: '🤖',
+    vapiAssistantId: '8884738c-1541-4b01-b7c8-375c9c7624c5',
+  },
+  {
     id: 'ai-trika-pft',
     name: 'Trika',
     type: 'ai',

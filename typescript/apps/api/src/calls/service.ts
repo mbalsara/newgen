@@ -8,6 +8,10 @@ import type { Call, NewCall, TranscriptMessage, Agent } from '@repo/database'
 // Agent IDs that use squads (vapiAssistantId contains squad ID, not assistant ID)
 const SQUAD_ENABLED_AGENTS = new Set(['ai-trika-pft'])
 
+// Agent IDs that are fully configured in VAPI (no local overrides)
+// These agents don't have systemPrompt in database - their config is in VAPI dashboard
+const VAPI_CONFIGURED_AGENTS = new Set(['ai-maggi'])
+
 export const callService = {
   // Get all calls
   async getCalls(): Promise<Call[]> {
@@ -73,8 +77,24 @@ export const callService = {
           provider_id: 'dr-sahai',
         },
       })
+    } else if (VAPI_CONFIGURED_AGENTS.has(params.agentId)) {
+      // Agent is fully configured in VAPI - only pass variableValues for template substitution
+      console.log(`[CALL] Starting VAPI-configured call for agent ${params.agentId}`)
+
+      vapiResult = await vapiApi.startCall({
+        assistantId: agent.vapiAssistantId,
+        phoneNumber: params.phoneNumberId,
+        customerNumber: params.customerNumber,
+        // Only pass variableValues - no model/voice/prompt overrides
+        variableValues: {
+          patient_name: params.patientName,
+          agent_name: agent.name,
+          practice_phone: agent.practicePhone || '555-123-4567',
+          provider_id: 'dr-sahai',
+        },
+      })
     } else {
-      // Use single assistant for agents without handoffs
+      // Use single assistant with local config overrides
       vapiResult = await vapiApi.startCall({
         assistantId: agent.vapiAssistantId,
         phoneNumber: params.phoneNumberId,
