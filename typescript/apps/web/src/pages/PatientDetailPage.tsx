@@ -1,30 +1,49 @@
-import { useParams, Navigate } from "react-router"
-import { patientDetails, type PatientId } from "@/lib/mock-patient-details"
+import { useParams, Link } from "react-router"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { User, CreditCard, Calendar, UserCheck, Pill, FlaskConical, DollarSign } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { User, CreditCard, Calendar, UserCheck, Pill, FlaskConical, DollarSign, ArrowLeft, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { PatientDemographicsSection } from "@/components/patient-demographics-section"
-import { PatientInsuranceCard } from "@/components/patient-insurance-card"
+import { api, type Patient } from "@/lib/api-client"
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const patient = patientDetails[id as PatientId]
+  const [patient, setPatient] = useState<Patient | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  if (!patient) {
-    return <Navigate to="/404" replace />
+  useEffect(() => {
+    if (!id) return
+
+    const loadPatient = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const data = await api.patients.getById(id)
+        setPatient(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load patient')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadPatient()
+  }, [id])
+
+  // Format phone for display
+  const formatPhone = (phone: string | null) => {
+    if (!phone) return '-'
+    if (phone.startsWith('+1') && phone.length === 12) {
+      return `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`
+    }
+    return phone
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount)
-  }
-
-  const formatDate = (dateString: string) => {
+  // Format date for display
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-'
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -32,22 +51,50 @@ export default function PatientDetailPage() {
     })
   }
 
-  const totalBalance = patient.bills.reduce((sum, bill) => sum + bill.balance, 0)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading patient...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !patient) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="py-12">
+              <div className="text-center space-y-4">
+                <h2 className="text-xl font-semibold">Patient Not Found</h2>
+                <p className="text-muted-foreground">
+                  {error || "The patient you're looking for doesn't exist or has been deleted."}
+                </p>
+                <Button asChild variant="outline">
+                  <Link to="/patients">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Patients
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  const fullName = `${patient.firstName} ${patient.lastName}`
 
   return (
     <div className="min-h-screen bg-background">
       <PageHeader
-        title={patient.demographics.fullName}
+        title={fullName}
         subtitle={`Patient ID: ${id}`}
-        backHref="/today"
-        rightContent={
-          totalBalance > 0 ? (
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Outstanding Balance</div>
-              <div className="text-2xl font-bold text-amber-600">{formatCurrency(totalBalance)}</div>
-            </div>
-          ) : undefined
-        }
+        backHref="/patients"
       />
 
       <div className="container mx-auto px-4 py-8">
@@ -83,16 +130,59 @@ export default function PatientDetailPage() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Demographics Tab */}
           <TabsContent value="demographics">
-            <PatientDemographicsSection demographics={patient.demographics} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Patient Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Full Name</div>
+                      <div className="text-base font-medium">{fullName}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">First Name</div>
+                      <div className="text-base">{patient.firstName}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Last Name</div>
+                      <div className="text-base">{patient.lastName}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Phone</div>
+                      <div className="text-base">{formatPhone(patient.phone)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Date of Birth</div>
+                      <div className="text-base">{formatDate(patient.dob)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Patient ID</div>
+                      <div className="text-base font-mono text-sm">{patient.id}</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
+          {/* Insurance Tab */}
           <TabsContent value="insurance">
-            <div className="space-y-4">
-              {patient.insurances.map((insurance) => (
-                <PatientInsuranceCard key={insurance.id} insurance={insurance} />
-              ))}
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Insurance Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  No insurance information on file
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Past Visits Tab */}
@@ -102,49 +192,8 @@ export default function PatientDetailPage() {
                 <CardTitle>Past Visits</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {patient.pastVisits.map((visit, index) => (
-                    <div key={index}>
-                      {index > 0 && <Separator className="my-4" />}
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="font-semibold text-primary">{formatDate(visit.date)}</div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Provider</div>
-                            <div className="text-base">{visit.provider}</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Reason</div>
-                            <div className="text-base">{visit.reason}</div>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <div className="text-sm text-muted-foreground">Diagnosis</div>
-                            <div className="text-base">{visit.diagnosis}</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Amount</div>
-                            <div className="text-base">{formatCurrency(visit.amount)}</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Payment Status</div>
-                            <div className="text-base">
-                              {visit.paid === visit.amount ? (
-                                <Badge variant="default" className="bg-green-600">
-                                  Paid in Full
-                                </Badge>
-                              ) : visit.paid > 0 ? (
-                                <Badge variant="secondary">Partial Payment</Badge>
-                              ) : (
-                                <Badge variant="destructive">Unpaid</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-center py-8 text-muted-foreground">
+                  No visit history on file
                 </div>
               </CardContent>
             </Card>
@@ -154,57 +203,11 @@ export default function PatientDetailPage() {
           <TabsContent value="bills">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Billing History</CardTitle>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Total Outstanding</div>
-                    <div className="text-xl font-bold text-amber-600">{formatCurrency(totalBalance)}</div>
-                  </div>
-                </div>
+                <CardTitle>Billing History</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {patient.bills.map((bill, index) => (
-                    <div key={bill.id}>
-                      {index > 0 && <Separator className="my-4" />}
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="font-semibold">{bill.id}</div>
-                            <Badge
-                              variant={
-                                bill.status === "Paid"
-                                  ? "default"
-                                  : bill.status === "Overdue"
-                                    ? "destructive"
-                                    : "secondary"
-                              }
-                            >
-                              {bill.status}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">{formatDate(bill.date)}</div>
-                          <div className="text-base">{bill.description}</div>
-                        </div>
-                        <div className="text-right space-y-1">
-                          <div>
-                            <div className="text-xs text-muted-foreground">Amount</div>
-                            <div className="font-medium">{formatCurrency(bill.amount)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground">Paid</div>
-                            <div className="font-medium text-green-600">{formatCurrency(bill.paid)}</div>
-                          </div>
-                          {bill.balance > 0 && (
-                            <div>
-                              <div className="text-xs text-muted-foreground">Balance</div>
-                              <div className="font-bold text-amber-600">{formatCurrency(bill.balance)}</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-center py-8 text-muted-foreground">
+                  No billing history on file
                 </div>
               </CardContent>
             </Card>
@@ -217,25 +220,9 @@ export default function PatientDetailPage() {
                 <CardTitle>Referrals</CardTitle>
               </CardHeader>
               <CardContent>
-                {patient.referrals.length > 0 ? (
-                  <div className="space-y-4">
-                    {patient.referrals.map((referral, index) => (
-                      <div key={index}>
-                        {index > 0 && <Separator className="my-4" />}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="font-semibold">{referral.referredTo}</div>
-                            <Badge variant="secondary">{referral.status}</Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">{formatDate(referral.date)}</div>
-                          <div className="text-base">{referral.reason}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">No referrals on file</div>
-                )}
+                <div className="text-center py-8 text-muted-foreground">
+                  No referrals on file
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -247,38 +234,9 @@ export default function PatientDetailPage() {
                 <CardTitle>Current Medications</CardTitle>
               </CardHeader>
               <CardContent>
-                {patient.medications.length > 0 ? (
-                  <div className="space-y-4">
-                    {patient.medications.map((medication, index) => (
-                      <div key={index}>
-                        {index > 0 && <Separator className="my-4" />}
-                        <div className="space-y-2">
-                          <div className="font-semibold text-lg">{medication.name}</div>
-                          <div className="grid md:grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <div className="text-muted-foreground">Dosage</div>
-                              <div>{medication.dosage}</div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground">Refills Remaining</div>
-                              <div>{medication.refills}</div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground">Prescribed By</div>
-                              <div>{medication.prescribedBy}</div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground">Prescribed Date</div>
-                              <div>{formatDate(medication.prescribedDate)}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">No medications on file</div>
-                )}
+                <div className="text-center py-8 text-muted-foreground">
+                  No medications on file
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -290,25 +248,9 @@ export default function PatientDetailPage() {
                 <CardTitle>Laboratory Results</CardTitle>
               </CardHeader>
               <CardContent>
-                {patient.labs.length > 0 ? (
-                  <div className="space-y-4">
-                    {patient.labs.map((lab, index) => (
-                      <div key={index}>
-                        {index > 0 && <Separator className="my-4" />}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="font-semibold text-lg">{lab.test}</div>
-                            <div className="text-sm text-muted-foreground">{formatDate(lab.date)}</div>
-                          </div>
-                          <div className="text-base">{lab.results}</div>
-                          <div className="text-sm text-muted-foreground">Ordered by: {lab.orderedBy}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">No lab results on file</div>
-                )}
+                <div className="text-center py-8 text-muted-foreground">
+                  No lab results on file
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

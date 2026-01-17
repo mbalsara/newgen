@@ -25,13 +25,15 @@ export function EditPatientModal({ open, onOpenChange, patient, onSuccess }: Edi
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Reset form when modal opens or patient changes
   useEffect(() => {
-    if (patient) {
+    if (open && patient) {
       setFirstName(patient.firstName)
       setLastName(patient.lastName)
       setPhone(patient.phone || '')
+      setError(null)
     }
-  }, [patient])
+  }, [open, patient])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,7 +111,7 @@ export function EditPatientModal({ open, onOpenChange, patient, onSuccess }: Edi
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Enter a 10-digit US phone number or include country code (e.g., +44)
+                Enter a 10-digit US phone number
               </p>
             </div>
             {error && (

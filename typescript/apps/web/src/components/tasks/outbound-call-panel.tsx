@@ -22,7 +22,7 @@ interface TranscriptMessage {
 
 export function OutboundCallPanel({ task, onClose }: OutboundCallPanelProps) {
   const { handleCallCompletion } = useTasks()
-  const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState(task.patient.phone || '')
   const [callState, setCallState] = useState<CallState>('idle')
   const [callId, setCallId] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([])

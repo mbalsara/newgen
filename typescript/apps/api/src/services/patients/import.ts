@@ -130,9 +130,18 @@ export async function importPatientsFromExcel(buffer: Buffer): Promise<ImportRes
           }
         }
 
-        // Create task if requested
-        const shouldCreateTask = row['Whether to create task']
-        if (shouldCreateTask === true || shouldCreateTask === 'true' || shouldCreateTask === 'yes' || shouldCreateTask === 'Yes' || shouldCreateTask === '1') {
+        // Create task (default to true unless explicitly set to false/no)
+        const createTaskValue = row['Whether to create task']
+        const shouldCreateTask = createTaskValue === undefined ||
+          createTaskValue === null ||
+          createTaskValue === '' ||
+          createTaskValue === true ||
+          createTaskValue === 'true' ||
+          createTaskValue === 'yes' ||
+          createTaskValue === 'Yes' ||
+          createTaskValue === '1'
+
+        if (shouldCreateTask) {
           try {
             // Get task type (default to post-visit)
             let taskType: TaskType = 'post-visit'

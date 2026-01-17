@@ -102,7 +102,7 @@ export function AddPatientModal({ open, onOpenChange, onSuccess }: AddPatientMod
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Enter a 10-digit US phone number or include country code (e.g., +44)
+                Enter a 10-digit US phone number
               </p>
             </div>
             {error && (

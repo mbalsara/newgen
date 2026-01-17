@@ -78,8 +78,8 @@ export function getPatientFullName(patient: Patient): string {
   return `${patient.firstName} ${patient.lastName}`.trim()
 }
 
-// Appointment schema
-export const AppointmentSchema = z.object({
+// Patient visit schema (stored in appointments table)
+export const PatientVisitSchema = z.object({
   id: z.number(),
   patientId: z.string(),
   visitDate: z.string(),
@@ -88,10 +88,10 @@ export const AppointmentSchema = z.object({
   updatedAt: z.coerce.date(),
 })
 
-export type Appointment = z.infer<typeof AppointmentSchema>
+export type PatientVisit = z.infer<typeof PatientVisitSchema>
 
-// New appointment (for creation)
-export const NewAppointmentSchema = AppointmentSchema.omit({
+// New patient visit (for creation)
+export const NewPatientVisitSchema = PatientVisitSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -99,4 +99,4 @@ export const NewAppointmentSchema = AppointmentSchema.omit({
   notes: true,
 })
 
-export type NewAppointment = z.infer<typeof NewAppointmentSchema>
+export type NewPatientVisit = z.infer<typeof NewPatientVisitSchema>
