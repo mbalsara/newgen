@@ -1,13 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useParams, useNavigate, Link } from 'react-router'
-import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown, Plus, Mic, AlertTriangle, ArrowRight, X, Pencil, Phone, StickyNote } from 'lucide-react'
+import { Search, RefreshCw, Filter, ExternalLink, Check, Flag, Play, ChevronDown, Plus, Mic, AlertTriangle, ArrowRight, X, Pencil, Phone, StickyNote, Trash2 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useTasks } from '@/contexts/tasks-context'
 import { cn } from '@/lib/utils'
 import type { Task, TimelineEvent, VoiceEvent, ObjectivesEvent, NextStepsEvent, CallEvent, TaskFilters, TaskStatus, PatientFlagReason } from '@/lib/task-types'
 import { OutboundCallPanel } from '@/components/tasks/outbound-call-panel'
 import { PatientFlagModal } from '@/components/patients/patient-flag-modal'
+import { AddTaskModal } from '@/components/tasks/add-task-modal'
 
 // Status colors
 const statusColors: Record<string, string> = {
@@ -55,6 +66,7 @@ export default function TasksPage() {
     markTaskDone,
     reopenTask,
     toggleNextStep,
+    deleteTask,
     loading,
     getAgent,
   } = useTasks()
@@ -62,6 +74,9 @@ export default function TasksPage() {
   const [expandedTranscripts, setExpandedTranscripts] = useState<Record<string, boolean>>({})
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
 
   // Handle task selection from URL param - clear filters to show the task
   useEffect(() => {
@@ -155,6 +170,13 @@ export default function TasksPage() {
                 />
               )}
             </div>
+            <button
+              onClick={() => setShowAddTaskModal(true)}
+              className="p-1.5 hover:bg-violet-100 rounded-lg text-violet-600 bg-violet-50"
+              title="Add Task"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -235,6 +257,10 @@ export default function TasksPage() {
             }}
             onAddNote={(note) => addNoteToTask(selectedTask.id, note)}
             onToggleNextStep={(eventId, index) => toggleNextStep(selectedTask.id, eventId, index)}
+            onDelete={() => {
+              setTaskToDelete(selectedTask)
+              setShowDeleteDialog(true)
+            }}
             expandedTranscripts={expandedTranscripts}
             onToggleTranscript={toggleTranscript}
             showAssignDropdown={showAssignDropdown}
@@ -246,6 +272,41 @@ export default function TasksPage() {
           </div>
         )}
       </main>
+
+      {/* Add Task Modal */}
+      <AddTaskModal
+        open={showAddTaskModal}
+        onOpenChange={setShowAddTaskModal}
+        onSuccess={refresh}
+      />
+
+      {/* Delete Task Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Task</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this task for {taskToDelete?.patient.name}?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (taskToDelete) {
+                  await deleteTask(taskToDelete.id)
+                  setTaskToDelete(null)
+                  navigate('/tasks', { replace: true })
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -307,7 +368,7 @@ function TaskCard({ task, isSelected, isFlagged, onClick }: {
 }
 
 // Task Detail Component
-function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onFlagPatient, onAddNote, onToggleNextStep, expandedTranscripts, onToggleTranscript, showAssignDropdown, setShowAssignDropdown }: {
+function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onFlagPatient, onAddNote, onToggleNextStep, onDelete, expandedTranscripts, onToggleTranscript, showAssignDropdown, setShowAssignDropdown }: {
   task: Task
   isFlagged: boolean
   flag: any
@@ -317,6 +378,7 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onF
   onFlagPatient: (reason: PatientFlagReason, notes: string) => void
   onAddNote: (note: string) => void
   onToggleNextStep: (eventId: string, index: number) => void
+  onDelete: () => void
   expandedTranscripts: Record<string, boolean>
   onToggleTranscript: (eventId: string) => void
   showAssignDropdown: boolean
@@ -467,6 +529,13 @@ function TaskDetail({ task, isFlagged, flag, onAssign, onMarkDone, onReopen, onF
               Demo Call
             </button>
           )}
+          <button
+            onClick={onDelete}
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 flex items-center gap-1.5"
+            title="Delete Task"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {task.status !== 'completed' ? (

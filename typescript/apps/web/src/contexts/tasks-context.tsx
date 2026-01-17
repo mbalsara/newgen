@@ -10,11 +10,14 @@ import { useCurrentUser } from '@/contexts/user-context'
 
 // Convert API task (with patient) to frontend task format
 function convertApiTaskToFrontend(apiTask: TaskWithPatient): FrontendTask {
+  // Build patient name from firstName and lastName
+  const patientName = `${apiTask.patient.firstName} ${apiTask.patient.lastName}`.trim()
+
   return {
     id: apiTask.id,
     patient: {
       id: apiTask.patient.id,
-      name: apiTask.patient.name,
+      name: patientName,
       phone: apiTask.patient.phone || '',
       dob: apiTask.patient.dob || '',
     },
@@ -85,6 +88,8 @@ interface TasksContextValue extends TasksState {
   escalateTask: (id: number, reason: string, assignTo: string) => void
   assignTask: (taskId: number, agentId: string) => void
   addNoteToTask: (taskId: number, note: string) => void
+  deleteTask: (id: number) => Promise<void>
+  createTask: (data: { patientId: string; type: string; assignedAgentId?: string; description?: string; amount?: string }) => Promise<void>
 
   // Patient flags
   flagPatient: (patientId: string, reason: PatientFlagReason, notes: string, flaggedBy: string) => void
@@ -328,6 +333,45 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       )
     } catch (err) {
       console.error('Error adding note:', err)
+    }
+  }, [])
+
+  const deleteTask = React.useCallback(async (id: number) => {
+    try {
+      await api.tasks.delete(id)
+      setTasks(prev => prev.filter(task => task.id !== id))
+      // Clear selection if deleted task was selected
+      if (selectedTaskId === id) {
+        setSelectedTaskId(null)
+      }
+    } catch (err) {
+      console.error('Error deleting task:', err)
+      throw err
+    }
+  }, [selectedTaskId])
+
+  const createTask = React.useCallback(async (data: {
+    patientId: string
+    type: string
+    assignedAgentId?: string
+    description?: string
+    amount?: string
+  }) => {
+    try {
+      await api.tasks.create({
+        patientId: data.patientId,
+        provider: 'Manual Entry',
+        type: data.type as any,
+        status: 'pending',
+        description: data.description || '',
+        assignedAgentId: data.assignedAgentId,
+        amount: data.amount,
+      })
+      // Refresh to get the new task with patient data
+      await refresh()
+    } catch (err) {
+      console.error('Error creating task:', err)
+      throw err
     }
   }, [])
 
@@ -579,6 +623,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     escalateTask,
     assignTask,
     addNoteToTask,
+    deleteTask,
+    createTask,
     flagPatient,
     removePatientFlag,
     isPatientFlagged,

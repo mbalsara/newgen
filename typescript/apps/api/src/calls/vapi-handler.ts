@@ -224,7 +224,7 @@ export const vapiApi = {
             },
           }
         : {
-            // Single assistant call - pass full overrides
+            // Single assistant call - pass full overrides and variableValues
             assistantId: params.assistantId,
             phoneNumberId: params.phoneNumber,
             customer: {
@@ -232,6 +232,7 @@ export const vapiApi = {
             },
             assistantOverrides: {
               ...params.assistantOverrides,
+              ...(params.variableValues && { variableValues: params.variableValues }),
               ...(webhookBaseUrl && { serverUrl: webhookBaseUrl }),
             },
           }

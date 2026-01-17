@@ -23,6 +23,7 @@ import { agentRoutes } from './agents/routes.js'
 import { taskRoutes } from './tasks/routes.js'
 import { callRoutes } from './calls/routes.js'
 import { schedulingRoutes } from './scheduling/routes.js'
+import { patientRoutes } from './services/patients/routes.js'
 
 const app = new Hono()
 
@@ -47,6 +48,7 @@ app.route('/api/agents', agentRoutes)
 app.route('/api/tasks', taskRoutes)
 app.route('/api/calls', callRoutes)
 app.route('/api/scheduling', schedulingRoutes)
+app.route('/api/patients', patientRoutes)
 
 // =============================================================================
 // VAPI Proxy Routes
