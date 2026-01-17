@@ -31,7 +31,8 @@
     "hono": "catalog:",
     "libphonenumber-js": "^1.12.33",
     "postgres": "catalog:",
-    "twilio": "^5.11.2"
+    "twilio": "^5.11.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -1,6 +1,6 @@
 import { builder } from '../../graphql/builder.js'
 import { patientService } from './service.js'
-import type { Patient } from './schema.js'
+import { getPatientFullName, type Patient } from './schema.js'
 
 /**
  * Patient GraphQL Type
@@ -8,17 +8,33 @@ import type { Patient } from './schema.js'
 export const PatientType = builder.objectRef<Patient>('Patient').implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    name: t.exposeString('name'),
-    email: t.exposeString('email'),
-    phone: t.exposeString('phone'),
-    dob: t.exposeString('dob'),
-    address: t.string({
-      nullable: true,
-      resolve: (patient) => patient.address,
+    firstName: t.exposeString('firstName'),
+    lastName: t.exposeString('lastName'),
+    // Computed full name for convenience
+    name: t.string({
+      resolve: (patient) => getPatientFullName(patient),
     }),
-    emergencyContact: t.string({
+    phone: t.string({
       nullable: true,
-      resolve: (patient) => patient.emergencyContact,
+      resolve: (patient) => patient.phone,
+    }),
+    dob: t.string({
+      nullable: true,
+      resolve: (patient) => patient.dob,
+    }),
+    flagReasons: t.field({
+      type: ['Int'],
+      nullable: true,
+      resolve: (patient) => patient.flagReasons,
+    }),
+    flaggedBy: t.string({
+      nullable: true,
+      resolve: (patient) => patient.flaggedBy,
+    }),
+    flaggedAt: t.field({
+      type: 'String',
+      nullable: true,
+      resolve: (patient) => patient.flaggedAt?.toISOString() || null,
     }),
     createdAt: t.field({
       type: 'String',
@@ -36,23 +52,19 @@ export const PatientType = builder.objectRef<Patient>('Patient').implement({
  */
 const CreatePatientInput = builder.inputType('CreatePatientInput', {
   fields: (t) => ({
-    name: t.string({ required: true }),
-    email: t.string({ required: true }),
+    firstName: t.string({ required: true }),
+    lastName: t.string({ required: true }),
     phone: t.string({ required: true }),
-    dob: t.string({ required: true }),
-    address: t.string({ required: false }),
-    emergencyContact: t.string({ required: false }),
+    dob: t.string({ required: false }),
   }),
 })
 
 const UpdatePatientInput = builder.inputType('UpdatePatientInput', {
   fields: (t) => ({
-    name: t.string({ required: false }),
-    email: t.string({ required: false }),
+    firstName: t.string({ required: false }),
+    lastName: t.string({ required: false }),
     phone: t.string({ required: false }),
     dob: t.string({ required: false }),
-    address: t.string({ required: false }),
-    emergencyContact: t.string({ required: false }),
   }),
 })
 
@@ -92,7 +104,13 @@ builder.mutationFields((t) => ({
       input: t.arg({ type: CreatePatientInput, required: true }),
     },
     resolve: async (_, args) => {
-      return await patientService.create(args.input)
+      // Convert null to undefined for optional fields
+      return await patientService.create({
+        firstName: args.input.firstName,
+        lastName: args.input.lastName,
+        phone: args.input.phone,
+        dob: args.input.dob ?? undefined,
+      })
     },
   }),
 
@@ -104,7 +122,13 @@ builder.mutationFields((t) => ({
       input: t.arg({ type: UpdatePatientInput, required: true }),
     },
     resolve: async (_, args) => {
-      return await patientService.update(args.id as string, args.input)
+      // Convert null to undefined for optional fields
+      const updateData: Record<string, string | undefined> = {}
+      if (args.input.firstName != null) updateData.firstName = args.input.firstName
+      if (args.input.lastName != null) updateData.lastName = args.input.lastName
+      if (args.input.phone != null) updateData.phone = args.input.phone
+      if (args.input.dob != null) updateData.dob = args.input.dob
+      return await patientService.update(args.id as string, updateData)
     },
   }),
 

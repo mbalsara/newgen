@@ -239,6 +239,58 @@ export const api = {
   },
 
   // -------------------------------------------------------------------------
+  // Patients API
+  // -------------------------------------------------------------------------
+  patients: {
+    list: (): Promise<Patient[]> => fetchAPI('/patients'),
+
+    getById: (id: string): Promise<Patient> => fetchAPI(`/patients/${id}`),
+
+    create: (data: { firstName: string; lastName: string; phone: string; dob?: string }): Promise<Patient> =>
+      fetchAPI('/patients', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (id: string, data: { firstName?: string; lastName?: string; phone?: string; dob?: string }): Promise<Patient> =>
+      fetchAPI(`/patients/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      fetchAPI(`/patients/${id}`, {
+        method: 'DELETE',
+      }),
+
+    import: async (file: File): Promise<{
+      success: boolean
+      totalRows: number
+      patientsCreated: number
+      patientsUpdated: number
+      appointmentsCreated: number
+      tasksCreated: number
+      errors: Array<{ row: number; error: string }>
+    }> => {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const url = `${API_BASE}/patients/import`
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Import failed' }))
+        throw new Error(error.error || `Import error: ${response.status}`)
+      }
+
+      return response.json()
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // Health Check
   // -------------------------------------------------------------------------
   health: {

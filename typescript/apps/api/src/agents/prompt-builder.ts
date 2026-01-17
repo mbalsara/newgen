@@ -173,12 +173,13 @@ export function buildCallPrompt(params: {
 }): PromptConfig {
   const { agent, task, patientContext } = params
 
-  // Extract first name from patient name
-  const patientFirstName = task.patient.name.split(' ')[0]
+  // Get patient name - use firstName and lastName from database
+  const patientFirstName = task.patient.firstName
+  const patientFullName = `${task.patient.firstName} ${task.patient.lastName}`.trim()
 
   // Build variable values
   const variables: Partial<PromptVariables> = {
-    patient_name: task.patient.name,
+    patient_name: patientFullName,
     patient_first_name: patientFirstName,
     practice_name: agent.practiceName || 'our office',
     practice_phone: agent.practicePhone || '',

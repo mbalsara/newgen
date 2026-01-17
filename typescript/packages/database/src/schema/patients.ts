@@ -29,8 +29,9 @@ export function indexToFlagReason(index: number): PatientFlagReason | undefined 
 // Patients table
 export const patients = pgTable('patients', {
   id: text('id').primaryKey(), // e.g., 'PT-2847'
-  name: text('name').notNull(),
-  phone: text('phone'),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  phone: text('phone'), // E.164 format (e.g., +14155551234)
   dob: text('dob'),
   // Behavior flags - array of reason indices
   flagReasons: smallint('flag_reasons').array(),
@@ -44,3 +45,8 @@ export const patients = pgTable('patients', {
 // TypeScript types
 export type Patient = typeof patients.$inferSelect
 export type NewPatient = typeof patients.$inferInsert
+
+// Helper to get full name
+export function getPatientFullName(patient: Patient): string {
+  return `${patient.firstName} ${patient.lastName}`.trim()
+}

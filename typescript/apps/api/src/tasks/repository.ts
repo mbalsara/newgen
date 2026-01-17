@@ -43,11 +43,14 @@ export const taskRepository = {
 
     if (filters?.search) {
       const searchLower = filters.search.toLowerCase()
-      filtered = filtered.filter(t =>
-        t.patient.name.toLowerCase().includes(searchLower) ||
-        t.patient.id.toLowerCase().includes(searchLower) ||
-        t.description.toLowerCase().includes(searchLower)
-      )
+      filtered = filtered.filter(t => {
+        const fullName = `${t.patient.firstName} ${t.patient.lastName}`.toLowerCase()
+        return fullName.includes(searchLower) ||
+          t.patient.firstName.toLowerCase().includes(searchLower) ||
+          t.patient.lastName.toLowerCase().includes(searchLower) ||
+          t.patient.id.toLowerCase().includes(searchLower) ||
+          t.description.toLowerCase().includes(searchLower)
+      })
     }
 
     return filtered
