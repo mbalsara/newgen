@@ -353,26 +353,36 @@ const staffMembers: NewAgent[] = [
 
 // Sample patients
 const samplePatients: NewPatient[] = [
-  { id: 'PT-2847', name: 'Sarah Johnson', phone: '(555) 123-4567', dob: '03/15/1985' },
+  { id: 'PT-2847', firstName: 'Sarah', lastName: 'Johnson', phone: '+15551234567', dob: '03/15/1985' },
   {
     id: 'PT-1923',
-    name: 'Michael Chen',
-    phone: '(555) 987-6543',
+    firstName: 'Michael',
+    lastName: 'Chen',
+    phone: '+15559876543',
     dob: '07/22/1978',
     flagReasons: [flagReasonToIndex('abusive-language')],
     flaggedBy: 'Max (AI)',
     flaggedAt: new Date(),
   },
-  { id: 'PT-3156', name: 'Emily Rodriguez', phone: '(555) 456-7890', dob: '11/08/1992' },
-  { id: 'PT-4521', name: 'James Wilson', phone: '(555) 234-5678', dob: '05/30/1965' },
-  { id: 'PT-2089', name: 'Patricia Brown', phone: '(555) 345-6789', dob: '09/14/1970' },
-  { id: 'PT-3847', name: 'Robert Taylor', phone: '(555) 567-8901', dob: '02/28/1958' },
-  { id: 'PT-4123', name: 'Linda Martinez', phone: '(555) 678-9012', dob: '04/12/1982' },
-  { id: 'PT-5234', name: 'David Kim', phone: '(555) 789-0123', dob: '08/25/1975' },
+  { id: 'PT-3156', firstName: 'Emily', lastName: 'Rodriguez', phone: '+15554567890', dob: '11/08/1992' },
+  { id: 'PT-4521', firstName: 'James', lastName: 'Wilson', phone: '+15552345678', dob: '05/30/1965' },
+  { id: 'PT-2089', firstName: 'Patricia', lastName: 'Brown', phone: '+15553456789', dob: '09/14/1970' },
+  { id: 'PT-3847', firstName: 'Robert', lastName: 'Taylor', phone: '+15555678901', dob: '02/28/1958' },
+  { id: 'PT-4123', firstName: 'Linda', lastName: 'Martinez', phone: '+15556789012', dob: '04/12/1982' },
+  { id: 'PT-5234', firstName: 'David', lastName: 'Kim', phone: '+15557890123', dob: '08/25/1975' },
   // PFT Follow-up test patient (original agent)
-  { id: 'PT-PFT-001', name: 'Margaret Thompson', phone: '(555) 111-2222', dob: '06/20/1962' },
+  { id: 'PT-PFT-001', firstName: 'Margaret', lastName: 'Thompson', phone: '+15551112222', dob: '06/20/1962' },
   // PFT Follow-up test patient (squad-enabled agent with rescheduling)
-  { id: 'PT-PFT-002', name: 'Robert Jenkins', phone: '(555) 333-4444', dob: '03/10/1955' },
+  { id: 'PT-PFT-002', firstName: 'Robert', lastName: 'Jenkins', phone: '+15553334444', dob: '03/10/1955' },
+  // Additional patients from mock data
+  { id: 'P001', firstName: 'Michael', lastName: 'Chen', phone: '+15551234567', dob: '1985-03-15' },
+  { id: 'P002', firstName: 'Jennifer', lastName: 'Martinez', phone: '+15552345678', dob: '1972-07-22' },
+  { id: 'P003', firstName: 'Robert', lastName: 'Thompson', phone: '+15553456789', dob: '1968-11-30' },
+  { id: 'P004', firstName: 'Emily', lastName: 'Davis', phone: '+15554567890', dob: '1990-05-18' },
+  { id: 'P005', firstName: 'David', lastName: 'Wilson', phone: '+15555678901', dob: '1995-09-25' },
+  { id: 'P006', firstName: 'Amanda', lastName: 'Rodriguez', phone: '+15556789012', dob: '1988-02-14' },
+  { id: 'P007', firstName: 'James', lastName: 'Taylor', phone: '+15557890123', dob: '2008-06-10' },
+  { id: 'P008', firstName: 'Patricia', lastName: 'Brown', phone: '+15558901234', dob: '1965-12-05' },
 ]
 
 // Sample tasks (references patient IDs)
