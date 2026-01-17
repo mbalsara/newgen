@@ -25,8 +25,8 @@ ALTER TABLE "patients" ALTER COLUMN "last_name" SET NOT NULL;
 
 --> statement-breakpoint
 
--- Drop the old name column
-ALTER TABLE "patients" DROP COLUMN "name";
+-- Make the old name column nullable (keeping for backwards compatibility)
+ALTER TABLE "patients" ALTER COLUMN "name" DROP NOT NULL;
 
 --> statement-breakpoint
 

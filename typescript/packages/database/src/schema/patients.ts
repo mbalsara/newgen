@@ -29,6 +29,7 @@ export function indexToFlagReason(index: number): PatientFlagReason | undefined 
 // Patients table
 export const patients = pgTable('patients', {
   id: text('id').primaryKey(), // e.g., 'PT-2847'
+  name: text('name'), // Deprecated - kept nullable for backwards compatibility
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   phone: text('phone'), // E.164 format (e.g., +14155551234)
