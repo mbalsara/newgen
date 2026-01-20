@@ -57,6 +57,7 @@ const aiAgents: NewAgent[] = [
     role: 'Patient Follow-up',
     avatar: '🤖',
     vapiAssistantId: '8884738c-1541-4b01-b7c8-375c9c7624c5',
+    practicePhone: '760-242-2333',
   },
   {
     id: 'ai-trika-pft',

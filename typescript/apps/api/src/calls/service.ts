@@ -89,7 +89,7 @@ export const callService = {
         variableValues: {
           patient_name: params.patientName,
           agent_name: agent.name,
-          practice_phone: agent.practicePhone || '555-123-4567',
+          practice_phone: agent.practicePhone || '760-242-2333',
           provider_id: 'dr-sahai',
         },
       })
